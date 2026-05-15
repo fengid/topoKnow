@@ -1,0 +1,28 @@
+/* Local font faces - Obsidian Luxe */
+
+/* Playfair Display - Normal */
+@font-face {
+  font-family: 'Playfair Display';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/fonts/playfair-display-latin.woff2') format('woff2');
+}
+
+/* Playfair Display - Italic */
+@font-face {
+  font-family: 'Playfair Display';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/playfair-display-italic.woff') format('woff');
+}
+
+/* Outfit */
+@font-face {
+  font-family: 'Outfit';
+  font-style: normal;
+  font-weight: 300 600;
+  font-display: swap;
+  src: url('/fonts/outfit-latin.woff2') format('woff2');
+}

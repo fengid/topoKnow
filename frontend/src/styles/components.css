@@ -1,0 +1,475 @@
+/* iOS 26 组件样式 */
+
+/* 基础 iOS 毛玻璃效果 */
+.ios-glass {
+  background: var(--ios-glass);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--ios-border-light);
+}
+
+.ios-glass-light {
+  background: var(--ios-glass-light);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--ios-border-light);
+}
+
+/* ==================== 液态玻璃效果 ==================== */
+/* 基础液态玻璃 - 模拟真实玻璃的反射和折射 */
+.liquid-glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur-medium)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur-medium)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border);
+  position: relative;
+  overflow: hidden;
+  box-shadow:
+    0 8px 32px var(--shadow-color-heavy),
+    inset 0 1px 0 var(--glass-edge-highlight);
+}
+
+/* 顶层光泽效果 */
+.liquid-glass::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -50%;
+  width: 200%;
+  height: 100%;
+  background: var(--glass-shine);
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+/* 顶部边缘高光 */
+.liquid-glass::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--glass-edge-highlight) 20%,
+    var(--glass-edge-highlight) 80%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+
+/* 浅色液态玻璃 - 用于次要元素 */
+.liquid-glass-light {
+  background: var(--glass-bg-light);
+  backdrop-filter: blur(var(--glass-blur-light)) saturate(150%);
+  -webkit-backdrop-filter: blur(var(--glass-blur-light)) saturate(150%);
+  border: 1px solid var(--glass-border-light);
+  position: relative;
+  overflow: hidden;
+  box-shadow: inset 0 1px 0 var(--glass-edge-soft);
+}
+
+/* 强模糊液态玻璃 - 用于弹窗和模态框 */
+.liquid-glass-heavy {
+  background: var(--glass-bg-heavy);
+  backdrop-filter: blur(var(--glass-blur-heavy)) saturate(200%);
+  -webkit-backdrop-filter: blur(var(--glass-blur-heavy)) saturate(200%);
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    0 12px 48px var(--shadow-color-heavy),
+    inset 0 1px 0 var(--glass-edge-highlight);
+}
+
+/* 蓝色渗透液态玻璃 */
+.liquid-glass-blue {
+  background: linear-gradient(
+    135deg,
+    var(--glass-tint-blue) 0%,
+    var(--glass-bg) 100%
+  );
+  backdrop-filter: blur(var(--glass-blur-medium)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur-medium)) saturate(var(--glass-saturate));
+  border: 1px solid rgba(10, 132, 255, 0.2);
+  position: relative;
+  overflow: hidden;
+  box-shadow:
+    0 4px 24px rgba(10, 132, 255, 0.15),
+    inset 0 1px 0 var(--glass-edge-highlight);
+}
+
+/* 紫色渗透液态玻璃 */
+.liquid-glass-purple {
+  background: linear-gradient(
+    135deg,
+    var(--glass-tint-purple) 0%,
+    var(--glass-bg) 100%
+  );
+  backdrop-filter: blur(var(--glass-blur-medium)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur-medium)) saturate(var(--glass-saturate));
+  border: 1px solid rgba(191, 90, 242, 0.2);
+  box-shadow:
+    0 4px 24px rgba(191, 90, 242, 0.15),
+    inset 0 1px 0 var(--glass-edge-highlight);
+}
+
+/* 青绿色渗透液态玻璃 */
+.liquid-glass-cyan {
+  background: linear-gradient(
+    135deg,
+    var(--glass-tint-cyan) 0%,
+    var(--glass-bg) 100%
+  );
+  backdrop-filter: blur(var(--glass-blur-medium)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur-medium)) saturate(var(--glass-saturate));
+  border: 1px solid rgba(100, 210, 255, 0.2);
+  box-shadow:
+    0 4px 24px rgba(100, 210, 255, 0.15),
+    inset 0 1px 0 var(--glass-edge-highlight);
+}
+
+/* 多层叠加液态玻璃 */
+.liquid-glass-stack {
+  position: relative;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur-medium)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur-medium)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    0 8px 32px var(--shadow-color-heavy),
+    inset 0 1px 0 var(--glass-edge-highlight);
+}
+
+.liquid-glass-stack::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.08) 0%,
+    transparent 50%
+  );
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+/* 液态玻璃卡片 */
+.liquid-card {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.08) 0%,
+    rgba(255, 255, 255, 0.03) 100%
+  );
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  border: 1px solid var(--glass-border-light);
+  border-radius: 18px;
+  box-shadow:
+    0 4px 16px var(--shadow-color),
+    inset 0 1px 0 var(--glass-edge-soft);
+}
+
+/* ==================== iOS 基础组件 ==================== */
+.ios-card {
+  background: var(--ios-bg-secondary);
+  border: 1px solid var(--ios-border);
+  border-radius: 14px;
+}
+
+/* iOS 按钮 */
+.ios-button {
+  padding: 10px 16px;
+  border-radius: 14px;
+  font-weight: 500;
+  transition: all 0.2s;
+  background: var(--ios-blue);
+  color: white;
+}
+
+.ios-button:hover {
+  background: linear-gradient(180deg, #3399FF 0%, var(--ios-blue) 100%);
+}
+
+.ios-button:active {
+  transform: scale(0.97);
+  transition: transform 0.1s ease;
+}
+
+.ios-button-secondary {
+  padding: 10px 16px;
+  border-radius: 14px;
+  font-weight: 500;
+  transition: all 0.2s;
+  background: transparent;
+  color: var(--ios-blue);
+}
+
+.ios-button-secondary:hover {
+  background: rgba(10, 132, 255, 0.1);
+}
+
+/* iOS 输入框 */
+.ios-input {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 14px;
+  transition: all 0.2s;
+  background: var(--ios-bg-tertiary);
+  border: 1px solid var(--ios-border);
+  color: var(--ios-text-primary);
+}
+
+.ios-input:focus {
+  outline: none;
+  border-color: var(--ios-blue);
+  box-shadow: 0 0 0 3px rgba(10,132,255,0.2);
+}
+
+.ios-input::placeholder {
+  color: var(--ios-text-tertiary);
+}
+
+/* ==================== iOS 26 组件样式 ==================== */
+/* 标签栏 */
+.ios-tabs {
+  display: flex;
+  background: var(--glass-bg-light);
+  backdrop-filter: blur(var(--glass-blur-light)) saturate(150%);
+  -webkit-backdrop-filter: blur(var(--glass-blur-light)) saturate(150%);
+  border-radius: 12px;
+  padding: 4px;
+  gap: 4px;
+}
+
+.ios-tab {
+  flex: 1;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ios-text-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ios-tab:hover {
+  color: var(--ios-text-primary);
+}
+
+.ios-tab.active {
+  background: var(--glass-bg-heavy);
+  color: var(--ios-accent-blue);
+  box-shadow: 0 2px 8px rgba(10, 132, 255, 0.15);
+}
+
+/* iOS 26 按钮变体 */
+.ios-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border-radius: 14px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
+  border: none;
+  outline: none;
+}
+
+.ios-btn:active {
+  transform: scale(0.97);
+}
+
+.ios-btn-primary {
+  background: linear-gradient(180deg, #3399FF 0%, var(--ios-accent-blue) 100%);
+  color: white;
+  box-shadow: 0 4px 16px rgba(10, 132, 255, 0.3);
+}
+
+.ios-btn-primary:hover {
+  box-shadow: 0 6px 20px rgba(10, 132, 255, 0.4);
+}
+
+.ios-btn-secondary {
+  background: var(--glass-bg-light);
+  color: var(--ios-accent-blue);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(var(--glass-blur-light));
+  -webkit-backdrop-filter: blur(var(--glass-blur-light));
+}
+
+.ios-btn-secondary:hover {
+  background: var(--glass-bg);
+}
+
+.ios-btn-ghost {
+  background: transparent;
+  color: var(--ios-text-secondary);
+}
+
+.ios-btn-ghost:hover {
+  color: var(--ios-text-primary);
+  background: var(--glass-bg-light);
+}
+
+/* iOS 26 输入框 */
+.ios-input-field {
+  width: 100%;
+  padding: 14px 18px;
+  background: var(--glass-bg-light);
+  border: 1px solid var(--glass-border-light);
+  border-radius: 14px;
+  color: var(--ios-text-primary);
+  font-size: 16px;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(var(--glass-blur-light));
+  -webkit-backdrop-filter: blur(var(--glass-blur-light));
+}
+
+.ios-input-field:focus {
+  outline: none;
+  border-color: var(--ios-accent-blue);
+  box-shadow: 0 0 0 4px rgba(10, 132, 255, 0.15), 0 4px 16px rgba(10, 132, 255, 0.1);
+}
+
+.ios-input-field::placeholder {
+  color: var(--ios-text-tertiary);
+}
+
+/* iOS 26 面板 */
+.ios-panel {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur-medium)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur-medium)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  padding: 20px;
+  box-shadow:
+    0 8px 32px var(--shadow-color),
+    inset 0 1px 0 var(--glass-edge-highlight);
+}
+
+/* iOS 26 列表项 */
+.ios-list-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  background: transparent;
+  border-radius: 14px;
+  transition: background 0.2s ease;
+  cursor: pointer;
+}
+
+.ios-list-item:hover {
+  background: var(--glass-bg-light);
+}
+
+.ios-list-item:active {
+  background: var(--glass-bg);
+}
+
+/* iOS 26 分隔线 */
+.ios-divider {
+  height: 1px;
+  background: var(--glass-border-light);
+  margin: 12px 0;
+}
+
+/* iOS 26 徽章 */
+.ios-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 20px;
+  background: var(--glass-bg-heavy);
+  color: var(--ios-text-secondary);
+}
+
+.ios-badge-blue {
+  background: rgba(10, 132, 255, 0.15);
+  color: var(--ios-accent-blue);
+}
+
+.ios-badge-green {
+  background: rgba(48, 209, 88, 0.15);
+  color: var(--ios-accent-green);
+}
+
+.ios-badge-red {
+  background: rgba(255, 69, 58, 0.15);
+  color: var(--ios-accent-red);
+}
+
+.ios-badge-orange {
+  background: rgba(255, 159, 10, 0.15);
+  color: var(--ios-accent-orange);
+}
+
+.ios-badge-purple {
+  background: rgba(191, 90, 242, 0.15);
+  color: var(--ios-accent-purple);
+}
+
+/* iOS 26 滑块 */
+.ios-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  background: var(--glass-bg-light);
+  border-radius: 3px;
+  outline: none;
+}
+
+.ios-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  background: white;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 2px 8px var(--shadow-color-heavy);
+}
+
+/* iOS 26 开关 */
+.ios-switch {
+  position: relative;
+  width: 51px;
+  height: 31px;
+  background: var(--glass-bg-light);
+  border-radius: 16px;
+  cursor: pointer;
+  transition: background 0.3s ease;
+  border: 1px solid var(--glass-border-light);
+}
+
+.ios-switch.active {
+  background: var(--ios-accent-blue);
+}
+
+.ios-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 25px;
+  height: 25px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.3s cubic-bezier(0.40, 0, 0..2, 1);
+  box-shadow: 0 2px 4px var(--shadow-color);
+}
+
+.ios-switch.active::after {
+  transform: translateX(20px);
+}

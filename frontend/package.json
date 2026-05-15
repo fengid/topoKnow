@@ -1,0 +1,40 @@
+{
+  "name": "topoknow-frontend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.20.0",
+    "framer-motion": "^10.16.0",
+    "reactflow": "^11.10.0",
+    "zustand": "^4.4.0",
+    "@tanstack/react-query": "^5.0.0",
+    "axios": "^1.6.0",
+    "lucide-react": "^0.294.0",
+    "dagre": "^0.8.5",
+    "react-markdown": "^9.0.0",
+    "react-syntax-highlighter": "^15.6.1",
+    "remark-gfm": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/dagre": "^0.7.52",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@types/react-syntax-highlighter": "^15.5.13",
+    "@vitejs/plugin-react": "^4.2.0",
+    "autoprefixer": "^10.4.0",
+    "eslint": "^8.55.0",
+    "postcss": "^8.4.0",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.3.0",
+    "vite": "^5.0.0"
+  }
+}

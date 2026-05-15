@@ -1,0 +1,114 @@
+/* React Flow Obsidian Luxe 样式 */
+
+/* React Flow 基础节点样式 */
+.react-flow__node {
+  border-radius: 16px;
+}
+
+.react-flow__node-default {
+  background: var(--home-card-bg) !important;
+  border: 1px solid var(--home-card-border) !important;
+  color: var(--home-text) !important;
+  padding: 14px 18px !important;
+  border-radius: 16px !important;
+  min-width: 160px;
+  box-shadow: 0 2px 12px var(--shadow-color-heavy) !important;
+  transition: all 0.2s ease !important;
+}
+
+.react-flow__node-default:hover {
+  border-color: rgba(201, 169, 110, 0.3) !important;
+  box-shadow: 0 0 20px rgba(201, 169, 110, 0.15) !important;
+  transform: translateY(-1px);
+}
+
+/* React Flow 连接点 */
+.react-flow__handle {
+  background: rgba(201, 169, 110, 0.6) !important;
+  width: 10px !important;
+  height: 10px !important;
+  border-radius: 50% !important;
+  border: 2px solid var(--home-bg) !important;
+}
+
+/* React Flow 边线 */
+.react-flow__edge-path {
+  stroke: rgba(201, 169, 110, 0.5) !important;
+  stroke-width: 2 !important;
+  stroke-opacity: 0.6 !important;
+}
+
+/* React Flow 控制面板 */
+.react-flow__controls {
+  background: var(--home-card-bg) !important;
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  border: 1px solid var(--home-card-border) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 4px 16px var(--shadow-color-heavy) !important;
+  overflow: visible !important;
+  width: auto !important;
+}
+
+.react-flow__controls-button {
+  background: transparent !important;
+  border: none !important;
+  color: var(--home-text) !important;
+  border-radius: 10px !important;
+  transition: background 0.15s ease !important;
+}
+
+.react-flow__controls-button:hover {
+  background: var(--home-toggle-hover) !important;
+}
+
+.react-flow__controls-button svg {
+  fill: currentColor !important;
+}
+
+/* React Flow 版权信息 */
+.react-flow__attribution {
+  display: none !important;
+}
+
+/* React Flow 背景网格 */
+.react-flow__background {
+  background-color: transparent !important;
+}
+
+/* ==================== Obsidian Luxe 边线样式 ==================== */
+.liquid-edge {
+  stroke: rgba(201, 169, 110, 0.5);
+  stroke-width: 2;
+  stroke-opacity: 0.5;
+  filter: drop-shadow(0 0 4px rgba(201, 169, 110, 0.2));
+}
+
+.liquid-edge-animated {
+  stroke: rgba(201, 169, 110, 0.5);
+  stroke-width: 2;
+  stroke-dasharray: 8 4;
+  animation: liquid-edge-flow 1s linear infinite;
+}
+
+@keyframes liquid-edge-flow {
+  to {
+    stroke-dashoffset: -12;
+  }
+}
+
+/* React Flow 连接点 - Obsidian Luxe 风格 */
+.liquid-handle {
+  background: rgba(201, 169, 110, 0.6) !important;
+  width: 10px !important;
+  height: 10px !important;
+  border-radius: 50% !important;
+  border: 2px solid var(--home-bg) !important;
+  box-shadow: 0 0 8px rgba(201, 169, 110, 0.3);
+  transition: all 0.2s ease;
+}
+
+.liquid-handle:hover {
+  box-shadow: 0 0 12px rgba(201, 169, 110, 0.5);
+  transform: scale(1.2);
+}

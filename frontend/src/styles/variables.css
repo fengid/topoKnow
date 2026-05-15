@@ -1,0 +1,260 @@
+/* iOS 26 设计系统变量 - 亮色/暗色双主题 */
+
+/* ==================== 亮色模式（默认） ==================== */
+:root {
+  /* 背景色 */
+  --ios-bg-primary: #F2F2F7;
+  --ios-bg-secondary: #FFFFFF;
+  --ios-bg-tertiary: #E5E5EA;
+  --ios-bg-card: #FFFFFF;
+
+  /* 首页 Obsidian Luxe 变量 */
+  --home-bg: #FAFAF8;
+  --home-text: #171717;
+  --home-text-sub: #a3a3a3;
+  --home-text-muted: #d4d4d4;
+  --home-border: #e5e5e5;
+  --home-border-light: rgba(0, 0, 0, 0.06);
+  --home-card-bg: rgba(0, 0, 0, 0.02);
+  --home-card-border: rgba(0, 0, 0, 0.04);
+  --home-card-hover: rgba(0, 0, 0, 0.04);
+  --home-input-bg: #FFFFFF;
+  --home-glow-ambient: rgba(201, 169, 110, 0.06);
+  --home-glow-ambient2: rgba(201, 169, 110, 0.04);
+  --home-gold-text: #A8893F;
+  --home-btn-text: #FFFFFF;
+  --home-footer-text: rgba(0, 0, 0, 0.25);
+  --home-toggle-hover: rgba(0, 0, 0, 0.05);
+
+  /* 文字色 */
+  --ios-text-primary: #000000;
+  --ios-text-secondary: #636366;
+  --ios-text-tertiary: #8E8E93;
+
+  /* 边框 */
+  --ios-border: #D1D1D6;
+  --ios-border-light: rgba(0, 0, 0, 0.08);
+
+  /* 强调色 - 亮色模式用 iOS 标准亮色蓝 */
+  --ios-blue: #007AFF;
+  --ios-blue-light: #5AC8FA;
+  --ios-blue-dark: #0056CC;
+
+  /* iOS 26 饱和色系 */
+  --ios-accent-blue: #007AFF;
+  --ios-accent-cyan: #32ADE6;
+  --ios-accent-green: #34C759;
+  --ios-accent-red: #FF3B30;
+  --ios-accent-orange: #FF9500;
+  --ios-accent-yellow: #FFCC00;
+  --ios-accent-purple: #AF52DE;
+  --ios-accent-pink: #FF2D55;
+
+  /* 毛玻璃效果 - 亮色 */
+  --ios-glass: rgba(255, 255, 255, 0.72);
+  --ios-glass-light: rgba(255, 255, 255, 0.6);
+
+  /* 液态玻璃效果 - 亮色模式用深色半透明 */
+  --glass-bg: rgba(0, 0, 0, 0.03);
+  --glass-bg-light: rgba(0, 0, 0, 0.02);
+  --glass-bg-heavy: rgba(0, 0, 0, 0.05);
+
+  /* 模糊和饱和度 */
+  --glass-blur-light: 12px;
+  --glass-blur-medium: 16px;
+  --glass-blur-heavy: 20px;
+  --glass-saturate: 180%;
+
+  /* 玻璃边框和边缘高光 - 亮色 */
+  --glass-border: rgba(0, 0, 0, 0.08);
+  --glass-border-light: rgba(0, 0, 0, 0.04);
+  --glass-edge-highlight: rgba(255, 255, 255, 0.7);
+  --glass-edge-soft: rgba(0, 0, 0, 0.03);
+
+  /* 彩色渗透 */
+  --glass-tint-blue: rgba(0, 122, 255, 0.06);
+  --glass-tint-purple: rgba(175, 82, 222, 0.05);
+  --glass-tint-cyan: rgba(50, 173, 230, 0.04);
+  --glass-tint-green: rgba(52, 199, 89, 0.04);
+
+  /* 光泽渐变 */
+  --glass-shine: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.6) 0%,
+    rgba(255, 255, 255, 0) 50%,
+    rgba(255, 255, 255, 0.1) 100%
+  );
+
+  /* 语义阴影变量 */
+  --shadow-color: rgba(0, 0, 0, 0.08);
+  --shadow-color-heavy: rgba(0, 0, 0, 0.12);
+
+  /* 画布专用 */
+  --canvas-bg: #F2F2F7;
+  --canvas-dot: #D1D1D6;
+  --edge-color: #007AFF;
+
+  /* 兼容旧变量 */
+  --primary: #007AFF;
+  --primary-dark: #0056CC;
+  --bg-dark: #F2F2F7;
+  --bg-card: #FFFFFF;
+  --text-primary: #000000;
+  --text-secondary: #636366;
+  --border: #D1D1D6;
+
+  /* 徽章颜色 - 亮色模式 */
+  --badge-article-bg: rgba(201, 169, 110, 0.12);
+  --badge-article-text: rgba(160, 130, 80, 0.9);
+  --badge-article-border: rgba(201, 169, 110, 0.25);
+  --badge-question-bg: rgba(100, 160, 220, 0.12);
+  --badge-question-text: rgba(60, 120, 180, 0.9);
+  --badge-question-border: rgba(100, 160, 220, 0.25);
+}
+
+/* ==================== 暗色模式 ==================== */
+.dark {
+  /* 背景色 */
+  --ios-bg-primary: #000000;
+  --ios-bg-secondary: #1C1C1E;
+  --ios-bg-tertiary: #2C2C2E;
+
+  /* 首页 Obsidian Luxe 变量 - 暗色 */
+  --home-bg: #050505;
+  --home-text: #F0EBE3;
+  --home-text-sub: rgba(240, 235, 227, 0.4);
+  --home-text-muted: rgba(240, 235, 227, 0.2);
+  --home-border: rgba(255, 255, 255, 0.06);
+  --home-border-light: rgba(255, 255, 255, 0.04);
+  --home-card-bg: rgba(255, 255, 255, 0.02);
+  --home-card-border: rgba(255, 255, 255, 0.04);
+  --home-card-hover: rgba(255, 255, 255, 0.04);
+  --home-input-bg: #0a0a0a;
+  --home-glow-ambient: rgba(201, 169, 110, 0.03);
+  --home-glow-ambient2: rgba(201, 169, 110, 0.02);
+  --home-gold-text: rgba(201, 169, 110, 0.7);
+  --home-btn-text: #050505;
+  --home-footer-text: rgba(240, 235, 227, 0.2);
+  --home-toggle-hover: rgba(255, 255, 255, 0.06);
+  --ios-bg-card: #1C1C1E;
+
+  /* 文字色 */
+  --ios-text-primary: #FFFFFF;
+  --ios-text-secondary: #8E8E93;
+  --ios-text-tertiary: #636366;
+
+  /* 边框 */
+  --ios-border: #38383A;
+  --ios-border-light: rgba(255, 255, 255, 0.08);
+
+  /* 强调色 - 暗色模式用更亮的蓝 */
+  --ios-blue: #0A84FF;
+  --ios-blue-light: #64D2FF;
+  --ios-blue-dark: #0056CC;
+
+  /* iOS 26 饱和色系 - 暗色 */
+  --ios-accent-blue: #0A84FF;
+  --ios-accent-cyan: #64D2FF;
+  --ios-accent-green: #30D158;
+  --ios-accent-red: #FF453A;
+  --ios-accent-orange: #FF9F0A;
+  --ios-accent-yellow: #FFD60A;
+  --ios-accent-purple: #BF5AF2;
+  --ios-accent-pink: #FF375F;
+
+  /* 毛玻璃效果 - 暗色 */
+  --ios-glass: rgba(28, 28, 30, 0.72);
+  --ios-glass-light: rgba(44, 44, 46, 0.6);
+
+  /* 液态玻璃效果 - 暗色模式用浅色半透明 */
+  --glass-bg: rgba(255, 255, 255, 0.08);
+  --glass-bg-light: rgba(255, 255, 255, 0.05);
+  --glass-bg-heavy: rgba(255, 255, 255, 0.12);
+
+  /* 玻璃边框和边缘高光 - 暗色 */
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --glass-border-light: rgba(255, 255, 255, 0.06);
+  --glass-edge-highlight: rgba(255, 255, 255, 0.25);
+  --glass-edge-soft: rgba(255, 255, 255, 0.08);
+
+  /* 彩色渗透 - 暗色 */
+  --glass-tint-blue: rgba(10, 132, 255, 0.08);
+  --glass-tint-purple: rgba(191, 90, 242, 0.06);
+  --glass-tint-cyan: rgba(100, 210, 255, 0.05);
+  --glass-tint-green: rgba(48, 209, 88, 0.05);
+
+  /* 光泽渐变 - 暗色 */
+  --glass-shine: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.15) 0%,
+    rgba(255, 255, 255, 0) 50%,
+    rgba(255, 255, 255, 0.03) 100%
+  );
+
+  /* 语义阴影变量 - 暗色 */
+  --shadow-color: rgba(0, 0, 0, 0.2);
+  --shadow-color-heavy: rgba(0, 0, 0, 0.3);
+
+  /* 画布专用 - 暗色 */
+  --canvas-bg: #000000;
+  --canvas-dot: #000000;
+  --edge-color: #0A84FF;
+
+  /* 兼容旧变量 */
+  --primary: #0A84FF;
+  --primary-dark: #0056CC;
+  --bg-dark: #000000;
+  --bg-card: #1C1C1E;
+  --text-primary: #FFFFFF;
+  --text-secondary: #8E8E93;
+  --border: #38383A;
+
+  /* 徽章颜色 - 暗色模式 */
+  --badge-article-bg: rgba(201, 169, 110, 0.15);
+  --badge-article-text: rgba(220, 190, 140, 0.9);
+  --badge-article-border: rgba(201, 169, 110, 0.3);
+  --badge-question-bg: rgba(100, 180, 240, 0.15);
+  --badge-question-text: rgba(140, 200, 255, 0.9);
+  --badge-question-border: rgba(100, 180, 240, 0.3);
+}
+
+/* 全局重置 */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 基础样式 */
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', sans-serif;
+  background: var(--ios-bg-primary);
+  min-height: 100vh;
+  color: var(--ios-text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar iOS 样式 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--ios-border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ios-text-tertiary);
+}
+
+/* 选择样式 */
+::selection {
+  background: rgba(10, 132, 255, 0.3);
+  color: white;
+}

@@ -1,0 +1,8 @@
+{
+  "name": "topoknow",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend"
+  ]
+}

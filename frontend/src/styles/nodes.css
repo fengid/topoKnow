@@ -1,0 +1,337 @@
+/* ==================== 知识树节点 Obsidian Luxe 样式 ==================== */
+
+/* 基础节点 */
+.liquid-node {
+  background: var(--home-card-bg);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--home-card-border);
+  border-radius: 18px;
+  padding: 14px 16px;
+  min-width: 170px;
+  position: relative;
+  overflow: visible;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+  box-shadow:
+    0 4px 16px var(--shadow-color),
+    inset 0 1px 0 var(--glass-edge-highlight);
+}
+
+/* 顶层光泽效果 */
+.liquid-node::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -50%;
+  width: 200%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.06) 50%,
+    transparent 100%
+  );
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.liquid-node:hover::before {
+  opacity: 1;
+  animation: node-shine 2s ease-in-out infinite;
+}
+
+@keyframes node-shine {
+  0% {
+    transform: translateX(-100%) skewX(-15deg);
+  }
+  100% {
+    transform: translateX(100%) skewX(-15deg);
+  }
+}
+
+/* 悬停效果 */
+.liquid-node:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 8px 24px var(--shadow-color-heavy),
+    inset 0 1px 0 var(--glass-edge-highlight),
+    0 0 20px rgba(201, 169, 110, 0.12);
+}
+
+/* 选中状态 - 金色发光 */
+.liquid-node-selected {
+  border-color: rgba(201, 169, 110, 0.4) !important;
+  box-shadow:
+    0 8px 32px rgba(201, 169, 110, 0.2),
+    0 0 0 3px rgba(201, 169, 110, 0.1),
+    inset 0 1px 0 var(--glass-edge-highlight) !important;
+}
+
+/* 重要性标记 - 高 */
+.liquid-node-high {
+  border-left: 3px solid var(--ios-accent-red);
+  background: linear-gradient(
+    135deg,
+    rgba(255, 69, 58, 0.08) 0%,
+    var(--glass-bg) 50%
+  );
+}
+
+/* 重要性标记 - 中 */
+.liquid-node-medium {
+  border-left: 3px solid var(--ios-accent-orange);
+  background: linear-gradient(
+    135deg,
+    rgba(255, 159, 10, 0.06) 0%,
+    var(--glass-bg) 50%
+  );
+}
+
+/* 重要性标记 - 低 */
+.liquid-node-low {
+  border-left: 3px solid var(--ios-accent-green);
+  background: linear-gradient(
+    135deg,
+    rgba(48, 209, 88, 0.05) 0%,
+    var(--glass-bg) 50%
+  );
+}
+
+/* 节点标题 */
+.liquid-node-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--home-text);
+  line-height: 1.4;
+  margin-bottom: 4px;
+}
+
+/* 节点描述 */
+.liquid-node-description {
+  font-size: 12px;
+  color: var(--home-text-sub);
+  line-height: 1.4;
+  margin-top: 4px;
+}
+
+/* 节点底部区域 */
+.liquid-node-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--home-border);
+}
+
+/* 难度星级 */
+.liquid-node-difficulty {
+  display: flex;
+  gap: 2px;
+}
+
+.liquid-node-difficulty-star {
+  font-size: 11px;
+  color: rgba(201, 169, 110, 0.8);
+}
+
+.liquid-node-difficulty-star-empty {
+  color: var(--home-text-muted);
+}
+
+/* AI 图标 */
+.liquid-node-ai-icon {
+  width: 14px;
+  height: 14px;
+  color: rgba(201, 169, 110, 0.6);
+  opacity: 0.8;
+}
+
+/* 节点展开按钮 */
+.liquid-node-expand-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  background: var(--home-card-bg);
+  border: 1px solid var(--home-border);
+  color: var(--home-text-sub);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.liquid-node-expand-btn:hover {
+  background: var(--home-toggle-hover);
+  color: var(--home-text);
+  border-color: var(--home-border);
+}
+
+/* 节点加载状态 */
+.liquid-node-loading {
+  position: relative;
+  overflow: hidden;
+}
+
+.liquid-node-loading::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.08) 50%,
+    transparent 100%
+  );
+  animation: node-loading-shimmer 1.5s infinite;
+}
+
+@keyframes node-loading-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* 节点 Tooltip */
+.liquid-node-tooltip {
+  width: 280px;
+  padding: 14px;
+  /* 亮色主题默认 - 暖白匹配 #FAFAF8 */
+  background: rgba(245, 244, 240, 0.97);
+  backdrop-filter: blur(20px) saturate(200%);
+  -webkit-backdrop-filter: blur(20px) saturate(200%);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 14px;
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(250, 250, 248, 0.8);
+  color: rgba(0, 0, 0, 0.85);
+  z-index: 9999;
+  pointer-events: none;
+}
+
+.dark .liquid-node-tooltip {
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(28, 28, 30, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+@keyframes tooltip-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 节点上下文菜单 */
+.liquid-node-context-menu {
+  position: fixed;
+  min-width: 150px;
+  padding: 6px;
+  /* 亮色主题默认 - 暖白匹配 #FAFAF8 */
+  background: rgba(245, 244, 240, 0.97);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 14px;
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.12),
+    inset 0 1px 0 rgba(250, 250, 248, 0.8);
+  z-index: 99999;
+  animation: context-menu-fade-in 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.dark .liquid-node-context-menu {
+  background: rgba(28, 28, 30, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+@keyframes context-menu-fade-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.liquid-node-context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--home-text);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.liquid-node-context-menu-item:hover {
+  background: var(--home-toggle-hover);
+}
+
+.liquid-node-context-menu-item-danger {
+  color: var(--ios-accent-red);
+}
+
+.liquid-node-context-menu-item-danger:hover {
+  background: rgba(255, 69, 58, 0.12);
+}
+
+.liquid-node-context-menu-divider {
+  height: 1px;
+  background: var(--home-border);
+  margin: 6px 0;
+}
+
+/* 节点徽章样式 */
+.node-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  backdrop-filter: blur(8px);
+  transition: all 0.2s ease;
+}
+
+.node-badge-article {
+  padding: 0 5px;
+  background: var(--badge-article-bg);
+  color: var(--badge-article-text);
+  border: 1px solid var(--badge-article-border);
+}
+
+.node-badge-question {
+  background: var(--badge-question-bg);
+  color: var(--badge-question-text);
+  border: 1px solid var(--badge-question-border);
+}

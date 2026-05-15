@@ -1,0 +1,7 @@
+bin/
+*.log
+logs/
+config.yaml
+config.*.yaml
+.env
+.env.local

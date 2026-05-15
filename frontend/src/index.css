@@ -1,0 +1,7 @@
+@import './styles/fonts.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* iOS 26 设计系统样式已移至 src/styles/ 目录 */

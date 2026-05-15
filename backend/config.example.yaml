@@ -1,0 +1,28 @@
+# Database Configuration
+database:
+  host: "postgres"
+  port: 5432
+  user: "postgres"
+  password: "postgres"
+  name: "topoknow"
+  sslmode: "disable"
+
+# AI Configuration (Multi-Provider)
+ai:
+  default_model: "glm-5.1"
+  models:
+    - id: "glm-5.1"
+      provider: "glm"
+      display_name: "GLM-5.1"
+      max_tokens: 10000
+      temperature: 0.3
+  providers:
+    glm:
+      api_key: "your-glm-api-key"
+      base_url: "https://open.bigmodel.cn/api/coding/paas/v4"
+
+# Application Configuration
+app:
+  host: "0.0.0.0"
+  port: 6011
+  mode: "debug"
