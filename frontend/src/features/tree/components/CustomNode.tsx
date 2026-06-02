@@ -10,6 +10,7 @@ import {
   Sparkles,
   Info,
   FileText,
+  Layers,
 } from 'lucide-react'
 import { useUIStore } from '@/store'
 
@@ -40,6 +41,7 @@ interface CustomNodeData {
   tooltipPosition?: { x: number; y: number } | null
   hasArticle?: boolean
   questionCount?: number
+  onBatchGen?: () => void
 }
 
 // Custom Node Component - iOS 26 Liquid Glass Style
@@ -309,6 +311,16 @@ export function CustomNode({
             >
               <Sparkles className="w-4 h-4" style={{ color: 'rgba(201,169,110,0.7)' }} />
               AI 展开
+            </button>
+            <button
+              onClick={() => {
+                data.onBatchGen?.()
+                setContextMenuNodeId(null)
+              }}
+              className="liquid-node-context-menu-item"
+            >
+              <Layers className="w-4 h-4" style={{ color: 'var(--ios-accent-blue)' }} />
+              批量生成
             </button>
             <div className="liquid-node-context-menu-divider" />
             {data.onDeleteChildren && (

@@ -134,11 +134,15 @@ export const useAIGenerationStore = create<AIGenerationState>()((set) => ({
 interface UIState {
   contextMenuNodeId: string | null
   setContextMenuNodeId: (id: string | null) => void
+  isBatchGenPanelOpen: boolean
+  setBatchGenPanelOpen: (open: boolean) => void
 }
 
 export const useUIStore = create<UIState>()(
   (set) => ({
     contextMenuNodeId: null,
     setContextMenuNodeId: (id) => set({ contextMenuNodeId: id }),
+    isBatchGenPanelOpen: false,
+    setBatchGenPanelOpen: (open) => set({ isBatchGenPanelOpen: open }),
   })
 )

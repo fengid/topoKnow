@@ -26,7 +26,6 @@
 | 后端 | Go 1.25 + Gin |
 | ORM | GORM v2 |
 | 数据库 | PostgreSQL 15 |
-| 缓存 | Redis 7（可选） |
 | 容器化 | Docker Compose |
 
 ## 快速启动
@@ -178,7 +177,6 @@ Tree ──1:N──> Node ──1:N──> Question
 | 前端 | 6010 |
 | 后端 | 6011 |
 | PostgreSQL | 5432 |
-| Redis | 6379 |
 
 ## License
 

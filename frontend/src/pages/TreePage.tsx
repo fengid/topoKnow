@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import ReactFlow, {
   Node,
@@ -20,12 +20,15 @@ import { treeApi, nodeApi } from '@/services/api'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { NodeFullscreenModal } from '@/components/NodeFullscreenModal'
 import { useUIStore, useThemeStore } from '@/store'
+import { useBatchGenSSE } from '@/features/tree/hooks/useBatchGenSSE'
 import { useModelStore } from '@/store/modelStore'
 import Navbar from '@/components/Navbar'
 import { CustomNode } from '@/features/tree/components'
+import { BatchGenPanel, BatchGenStartDialog } from '@/features/tree/components/BatchGenPanel'
 import { NoiseOverlay } from '@/components/shared'
 import type { Node as NodeType } from '@/types'
-import { getLayoutedElements } from '@/utils/layout'
+import { getLayoutedElements, getPartialLayout } from '@/utils/layout'
+import type { LayoutedElement } from '@/utils/layout'
 
 const nodeTypes: NodeTypes = {
   custom: CustomNode,
@@ -36,14 +39,62 @@ export default function TreePage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
-  const { setContextMenuNodeId } = useUIStore()
+  const { setContextMenuNodeId, isBatchGenPanelOpen, setBatchGenPanelOpen } = useUIStore()
   const { resolvedTheme } = useThemeStore()
   const selectedModelId = useModelStore((s) => s.selectedModelId)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
 
+  const [batchGenTarget, setBatchGenTarget] = useState<{ nodeId: string; topic: string } | null>(null)
+
+  const {
+    task: batchGenTask,
+    items: batchGenItems,
+    isConnected: batchGenConnected,
+    start: batchGenStart,
+    cancel: batchGenCancel,
+    retry: batchGenRetry,
+    error: batchGenError,
+  } = useBatchGenSSE(id)
+
+  const autoOpenPanelRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (batchGenTask && autoOpenPanelRef.current !== batchGenTask.id) {
+      autoOpenPanelRef.current = batchGenTask.id
+      if (!isBatchGenPanelOpen) {
+        setBatchGenPanelOpen(true)
+      }
+    }
+    if (!batchGenTask) {
+      autoOpenPanelRef.current = null
+    }
+  }, [batchGenTask])
+
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null)
+  const prevNodeIdsRef = useRef<Set<string>>(new Set())
+  const batchGenRootRef = useRef<string | null>(null)
+
+  const prevCompletedCountRef = useRef(0)
+
+  useEffect(() => {
+    if (!batchGenTask) {
+      batchGenRootRef.current = null
+      prevCompletedCountRef.current = 0
+      return
+    }
+    if (batchGenTask.status === 'running' && batchGenRootRef.current == null) {
+      batchGenRootRef.current = batchGenTask.root_node_id
+    }
+    const completed = batchGenTask.completed_items
+    if (completed > prevCompletedCountRef.current) {
+      prevCompletedCountRef.current = completed
+      queryClient.invalidateQueries({ queryKey: ['tree', id] })
+    }
+    if (batchGenTask.status === 'completed' || batchGenTask.status === 'cancelled') {
+      batchGenRootRef.current = null
+    }
+  }, [batchGenTask, id, queryClient])
 
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean
@@ -105,13 +156,11 @@ export default function TreePage() {
       return nodeId
     },
     onSuccess: (deletedNodeId) => {
-      // 检查删除的是否是根节点
       if (treeData?.root_node?.id === deletedNodeId) {
-        // 跳转到首页
+        queryClient.invalidateQueries({ queryKey: ['trees'] })
         navigate('/')
         return
       }
-      // 非根节点，正常刷新树数据
       queryClient.invalidateQueries({ queryKey: ['tree', id] })
     },
   })
@@ -294,6 +343,9 @@ export default function TreePage() {
               setSelectedNodeId(node.id)
             },
             onExpand: () => expandMutation.mutate(node.id),
+            onBatchGen: () => {
+              setBatchGenTarget({ nodeId: node.id, topic: node.topic })
+            },
             onToggleExpand: () => {
               toggleExpandMutation.mutate({
                 nodeId: node.id,
@@ -321,7 +373,28 @@ export default function TreePage() {
         }))
     })
 
-    const layouted = getLayoutedElements(flowNodes, flowEdges)
+    const prevIds = prevNodeIdsRef.current
+    const currentIds = new Set(flowNodes.map((n) => n.id))
+    const hasNewNodes = [...currentIds].some((id) => !prevIds.has(id))
+    const batchRootId = batchGenRootRef.current
+
+    let layouted: LayoutedElement
+
+    if (hasNewNodes && batchRootId && currentIds.has(batchRootId)) {
+      // 增量布局：只重排子树
+      // 用当前已渲染节点的位置作为锚点，而非新创建的 flowNodes（position 全为 {0,0}）
+      const renderedPositions = new Map(nodes.map((n) => [n.id, n.position]))
+      const existingFlowNodes = flowNodes
+        .filter((n) => prevIds.has(n.id))
+        .map((n) => ({ ...n, position: renderedPositions.get(n.id) ?? n.position }))
+      const newFlowNodes = flowNodes.filter((n) => !prevIds.has(n.id))
+      layouted = getPartialLayout(existingFlowNodes, newFlowNodes, flowEdges, batchRootId)
+    } else {
+      // 全量布局
+      layouted = getLayoutedElements(flowNodes, flowEdges)
+    }
+
+    prevNodeIdsRef.current = currentIds
     setNodes(layouted.nodes)
     setEdges(layouted.edges)
   }, [treeData, setNodes, setEdges])
@@ -372,6 +445,16 @@ export default function TreePage() {
 
       {/* React Flow Canvas */}
       <div className="flex-1 relative z-10" onDrop={onDrop} onDragOver={onDragOver}>
+        <BatchGenPanel
+          task={batchGenTask}
+          items={batchGenItems}
+          isConnected={batchGenConnected}
+          isPanelOpen={isBatchGenPanelOpen}
+          error={batchGenError}
+          onClose={() => setBatchGenPanelOpen(false)}
+          onCancel={batchGenCancel}
+          onRetry={batchGenRetry}
+        />
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -469,6 +552,19 @@ export default function TreePage() {
         nodeId={selectedNodeId}
         onClose={() => {
           setSelectedNodeId(null)
+        }}
+      />
+
+      {/* Batch Gen Start Dialog */}
+      <BatchGenStartDialog
+        isOpen={batchGenTarget != null}
+        nodeTopic={batchGenTarget?.topic ?? ''}
+        onClose={() => setBatchGenTarget(null)}
+        onStart={async (layers) => {
+          if (!batchGenTarget) return
+          await batchGenStart(batchGenTarget.nodeId, layers, selectedModelId ?? undefined)
+          setBatchGenTarget(null)
+          setBatchGenPanelOpen(true)
         }}
       />
     </div>

@@ -49,15 +49,17 @@ func New(cfg *config.Config) *Server {
 	aiService := service.NewAIService(aiFactory, cfg)
 	promptSvc := service.NewPromptService(promptRepo, aiService)
 	aiService.SetPromptService(promptSvc)
-	nodeContextSvc := service.NewNodeContextService(nodeRepo)
+	nodeContextSvc := service.NewNodeContextService(nodeRepo, treeRepo)
 
 	// Initialize handlers
 	treeHandler := handler.NewTreeHandler(treeRepo, nodeRepo, aiService)
-	nodeHandler := handler.NewNodeHandler(nodeRepo, treeRepo, aiService)
+	nodeHandler := handler.NewNodeHandler(nodeRepo, treeRepo, aiService, nodeContextSvc)
 	aiHandler := handler.NewAIHandler(aiService, aiFactory)
 	promptHandler := handler.NewPromptHandler(promptSvc)
 	articleHandler := handler.NewArticleHandler(articleRepo, nodeRepo, aiService, nodeContextSvc)
 	questionHandler := handler.NewQuestionHandler(questionRepo, nodeRepo, aiService, nodeContextSvc)
+	batchGenSvc := service.NewBatchGenService(aiService, nodeRepo, treeRepo, articleRepo, nodeContextSvc)
+	batchGenHandler := handler.NewBatchGenHandler(batchGenSvc)
 
 	// Initialize default prompts
 	if err := promptSvc.InitDefaultPrompts(); err != nil {
@@ -70,7 +72,7 @@ func New(cfg *config.Config) *Server {
 	}
 
 	// Setup router
-	router := setupRouter(cfg, treeHandler, nodeHandler, aiHandler, promptHandler, articleHandler, questionHandler)
+	router := setupRouter(cfg, treeHandler, nodeHandler, aiHandler, promptHandler, articleHandler, questionHandler, batchGenHandler)
 
 	return &Server{
 		config: cfg,
@@ -86,6 +88,7 @@ func setupRouter(
 	promptHandler *handler.PromptHandler,
 	articleHandler *handler.ArticleHandler,
 	questionHandler *handler.QuestionHandler,
+		batchGenHandler *handler.BatchGenHandler,
 ) *gin.Engine {
 	if cfg.App.Mode == "release" {
 		gin.SetMode(gin.ReleaseMode)
@@ -112,7 +115,7 @@ func setupRouter(
 		AllowOrigins:     corsOrigins,
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
-		ExposeHeaders:    []string{"Content-Length"},
+		ExposeHeaders:    []string{"Content-Length", "Content-Type"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
@@ -133,6 +136,16 @@ func setupRouter(
 			trees.GET("/:id", treeHandler.GetByID)
 			trees.DELETE("/:id", treeHandler.Delete)
 		}
+
+			// Batch generation routes
+			batchGen := v1.Group("/trees/:id/batch-gen")
+			{
+			batchGen.POST("/start", batchGenHandler.Start)
+			batchGen.POST("/cancel", batchGenHandler.Cancel)
+			batchGen.POST("/retry/:itemId", batchGenHandler.Retry)
+			batchGen.GET("/status", batchGenHandler.Status)
+			batchGen.GET("/stream", batchGenHandler.Stream)
+			}
 
 		// Node routes (public)
 		nodes := v1.Group("/nodes")

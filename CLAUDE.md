@@ -18,7 +18,7 @@ docker compose logs -f          # View logs
 docker compose down             # Stop
 ```
 
-Docker services: frontend (6010), backend (6011), postgres (5432), redis (6379)
+Docker services: frontend (6010), backend (6011), postgres (5432)
 
 ## Key Conventions
 

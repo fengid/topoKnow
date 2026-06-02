@@ -444,7 +444,7 @@ func getDepthStrategy(childDepth int) string {
 	case childDepth == 1:
 		return `当前是第1层（大类划分）。
 生成规则：
-- 生成该职位核心知识大类（如：语言基础、数据结构与算法、框架、数据库、系统设计等）
+- 生成该主题的核心知识大类（如：基础概念、核心理论、工具方法、实践应用、前沿发展等）
 - 每个大类应该是独立的考察维度
 - 覆盖面要广，遵循 MECE 原则（互斥且完整）
 - 优先生成学习中最核心的大类`
@@ -656,15 +656,15 @@ func (s *AIService) callAI(prompt string, modelID ...string) (string, error) {
 		return "", fmt.Errorf("获取 AI 客户端失败: %w", err)
 	}
 
-	// 确定实际使用的 model ID（空则用默认）
-	if mid == "" {
-		mid = s.factory.GetDefaultModelID()
+	effectiveID := mid
+	if effectiveID == "" {
+		effectiveID = s.factory.GetDefaultModelID()
 	}
 
 	maxTokens := s.config.MaxTokens
 	temperature := s.config.Temperature
 	for _, m := range s.config.Models {
-		if m.ID == mid {
+		if m.ID == effectiveID {
 			if m.MaxTokens > 0 {
 				maxTokens = m.MaxTokens
 			}

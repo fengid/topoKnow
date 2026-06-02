@@ -17,16 +17,18 @@ import (
 const MaxChildNodes = 10
 
 type NodeHandler struct {
-	nodeRepo  *repository.NodeRepository
-	treeRepo  *repository.TreeRepository
-	aiService *service.AIService
+	nodeRepo       *repository.NodeRepository
+	treeRepo       *repository.TreeRepository
+	aiService      *service.AIService
+	nodeContextSvc *service.NodeContextService
 }
 
-func NewNodeHandler(nodeRepo *repository.NodeRepository, treeRepo *repository.TreeRepository, aiService *service.AIService) *NodeHandler {
+func NewNodeHandler(nodeRepo *repository.NodeRepository, treeRepo *repository.TreeRepository, aiService *service.AIService, nodeContextSvc *service.NodeContextService) *NodeHandler {
 	return &NodeHandler{
-		nodeRepo:  nodeRepo,
-		treeRepo:  treeRepo,
-		aiService: aiService,
+		nodeRepo:       nodeRepo,
+		treeRepo:       treeRepo,
+		aiService:      aiService,
+		nodeContextSvc: nodeContextSvc,
 	}
 }
 
@@ -193,8 +195,24 @@ func (h *NodeHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	if err := h.nodeRepo.Delete(id); err != nil {
+	node, err := h.nodeRepo.FindByID(id)
+	if err != nil {
 		response.NotFound(c, "Node not found")
+		return
+	}
+
+	// 根节点删除 → 删除整棵树
+	if node.ParentID == nil {
+		if err := h.treeRepo.Delete(node.TreeID.String()); err != nil {
+			response.InternalError(c, "Failed to delete tree")
+			return
+		}
+		response.Success(c, gin.H{"deleted_tree": true})
+		return
+	}
+
+	if err := h.nodeRepo.Delete(id); err != nil {
+		response.InternalError(c, "Failed to delete node")
 		return
 	}
 
@@ -261,28 +279,11 @@ func (h *NodeHandler) Expand(c *gin.Context) {
 	_ = c.ShouldBindJSON(&expandReq)
 	modelID := expandReq.Model
 
-	// 获取节点信息
-	parentNode, err := h.nodeRepo.FindByID(id)
+	// 使用共享上下文构建器
+	parentNode, existingChildren, ctx, err := h.nodeContextSvc.BuildExpandContext(id)
 	if err != nil {
 		response.NotFound(c, "Node not found")
 		return
-	}
-
-	// 查询已有子节点
-	existingChildren, err := h.nodeRepo.FindChildren(id)
-	if err != nil {
-		response.InternalError(c, "Failed to fetch children")
-		return
-	}
-
-	// 构建已有子节点的丰富信息
-	existingSiblings := make([]model.SiblingInfo, 0, len(existingChildren))
-	for _, child := range existingChildren {
-		existingSiblings = append(existingSiblings, model.SiblingInfo{
-			Topic:       child.Topic,
-			Description: child.Description,
-			Importance:  child.Importance,
-		})
 	}
 
 	// 检查子节点数量是否已达上限
@@ -291,47 +292,9 @@ func (h *NodeHandler) Expand(c *gin.Context) {
 		return
 	}
 
-	// 查询祖先节点链路（从根节点到父节点的路径）
-	var ancestors []model.AncestorInfo
-	ancestorsNodes, err := h.nodeRepo.FindAncestors(id)
-	if err != nil {
-		logger.L.Errorf("[Node] 查询祖先节点失败: %v", err)
-	} else {
-		ancestors = make([]model.AncestorInfo, 0, len(ancestorsNodes))
-		for _, anc := range ancestorsNodes {
-			ancestors = append(ancestors, model.AncestorInfo{
-				Topic:       anc.Topic,
-				Description: anc.Description,
-				Importance:  anc.Importance,
-				Difficulty:  anc.Difficulty,
-				Depth:       anc.Depth,
-			})
-		}
-	}
-
-	// 获取根节点职位名称
-	rootTopic := parentNode.Topic
-	tree, err := h.treeRepo.FindByID(parentNode.TreeID.String())
-	if err != nil {
-		logger.L.Errorf("[Node] 查询树信息失败: %v", err)
-	} else {
-		rootTopic = tree.RootTopic
-	}
-
-	// 构建完整上下文
-	ctx := model.ExpandContext{
-		RootTopic:        rootTopic,
-		ParentTopic:      parentNode.Topic,
-		ParentDesc:       parentNode.Description,
-		ParentImportance: parentNode.Importance,
-		ChildDepth:       parentNode.Depth + 1,
-		Ancestors:        ancestors,
-		ExistingSiblings: existingSiblings,
-	}
-
 	if len(existingChildren) == 0 {
 		// 无子节点 → 批量生成
-		childInfos, err := h.aiService.GenerateChildNodes(ctx, modelID)
+		childInfos, err := h.aiService.GenerateChildNodes(*ctx, modelID)
 		if err != nil {
 			logger.L.Errorf("[Node] AI 批量生成子节点失败: %v", err)
 			response.InternalError(c, err.Error())
@@ -377,7 +340,7 @@ func (h *NodeHandler) Expand(c *gin.Context) {
 	}
 
 	// 有子节点 → 单个生成
-	childInfo, err := h.aiService.GenerateChildNodeInfo(ctx, modelID)
+	childInfo, err := h.aiService.GenerateChildNodeInfo(*ctx, modelID)
 	if err != nil {
 		logger.L.Errorf("[Node] AI 生成子节点失败: %v", err)
 		response.Success(c, existingChildren)
@@ -385,7 +348,7 @@ func (h *NodeHandler) Expand(c *gin.Context) {
 	}
 
 	// 检查 AI 返回的主题是否已存在（双重检查）
-	for _, existing := range existingSiblings {
+	for _, existing := range ctx.ExistingSiblings {
 		if strings.EqualFold(existing.Topic, childInfo.Topic) {
 			logger.L.Infof("[Node] AI 返回的主题 '%s' 已存在，跳过创建", childInfo.Topic)
 			response.Success(c, existingChildren)

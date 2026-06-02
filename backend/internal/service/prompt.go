@@ -221,11 +221,11 @@ func (s *PromptService) InitDefaultPrompts() error {
 		{
 			Name:     "expand_node",
 			Category: "tree",
-			Version:  1,
+			Version:  2,
 			Template: `你是一位专业的知识教育专家和知识拓扑构建专家。
 
 当前节点信息：
-- 职位/主题：{{topic}}
+- 学习主题：{{topic}}
 - 已掌握程度：{{level}}
 
 请生成下一层级的知识分支，要求：
@@ -255,10 +255,10 @@ func (s *PromptService) InitDefaultPrompts() error {
 		{
 			Name:     "root_node_info",
 			Category: "tree",
-			Version:  2,
-			Template: `你是一位资深的技术教育专家和学习规划师。请为以下职位生成知识拓扑的根节点信息。
+			Version:  3,
+			Template: `你是一位资深的教育专家和学习规划师。请为以下学习主题生成知识拓扑的根节点信息。
 
-职位名称：{{topic}}
+学习主题：{{topic}}
 
 要求：
 1. 只返回纯 JSON 对象，不要任何其他文字
@@ -267,18 +267,18 @@ func (s *PromptService) InitDefaultPrompts() error {
 4. 用中文输出描述内容
 
 JSON 格式：
-{"description":"职位的详细描述和学习目标（100-200字，用中文）","importance":"high/medium/low","difficulty":1-5}
+{"description":"该主题的详细概述和学习目标（100-200字，用中文）","importance":"high/medium/low","difficulty":1-5}
 
 示例：
-{"description":"Java后端开发工程师负责使用Java语言设计和实现高效、可扩展的服务器端应用程序。核心技术栈包括Spring生态、JVM调优、分布式系统设计、数据库优化等。核心技能包括并发编程、设计模式、微服务架构和系统设计能力。","importance":"high","difficulty":4}
+{"description":"人工智能是计算机科学的重要分支，研究如何让机器模拟人类智能行为。核心领域包括机器学习、深度学习、自然语言处理、计算机视觉和强化学习等。学习路径涵盖数学基础、算法原理、模型训练与工程实践，是当今科技领域最前沿且应用广泛的方向之一。","importance":"high","difficulty":4}
 
-开始生成，职位名称：{{topic}}`,
+开始生成，学习主题：{{topic}}`,
 		},
 		{
 			Name:     "explain_node",
 			Category: "node",
-			Version:  1,
-			Template: `请详细介绍以下技术主题，用于系统学习：
+			Version:  2,
+			Template: `请详细介绍以下学习主题，用于系统学习：
 
 主题：{{topic}}
 
@@ -291,8 +291,8 @@ JSON 格式：
 		{
 			Name:     "generate_quiz",
 			Category: "quiz",
-			Version:  1,
-			Template: `你是一位专业的技术教育专家。请为以下主题生成练习题：
+			Version:  2,
+			Template: `你是一位专业的教育专家。请为以下主题生成练习题：
 
 主题：{{topic}}
 难度：{{level}}  (basic/intermediate/advanced)
@@ -312,8 +312,8 @@ JSON 格式：
 		{
 			Name:     "generate_article",
 			Category: "article",
-			Version:  2,
-			Template: `你是一位资深的技术教育专家和知识学习导师。请为以下学习路径中的当前节点生成一篇深入、全面的知识点文章。
+			Version:  3,
+			Template: `你是一位资深的教育专家和知识学习导师。请为以下学习路径中的当前节点生成一篇深入、全面的知识点文章。
 
 {{ancestors}}{{siblings}}当前节点信息：
 - 主题：{{topic}}
@@ -343,8 +343,8 @@ JSON 格式：
 		{
 			Name:     "generate_single_question",
 			Category: "quiz",
-			Version:  2,
-			Template: `你是一位专业的技术知识专家。请为以下学习路径中的最后一个节点生成一道练习题。
+			Version:  3,
+			Template: `你是一位专业的知识教育专家。请为以下学习路径中的最后一个节点生成一道练习题。
 
 {{ancestors}}当前节点信息：
 - 主题：{{topic}}
@@ -368,12 +368,12 @@ JSON 格式：
 		{
 			Name:     "child_node_info",
 			Category: "tree",
-			Version:  2,
-			Template: `你是一位资深技术教育专家和知识体系架构师。你正在为「{{rootTopic}}」这个主题构建知识拓扑。
+			Version:  3,
+			Template: `你是一位资深教育专家和知识体系架构师。你正在为「{{rootTopic}}」这个主题构建知识拓扑。
 
 请为当前节点生成【严格一个】新的子节点。注意：只生成一个，不要生成多个。
 
-## 职位目标
+## 学习主题
 {{rootTopic}}
 
 ## 知识树路径（从根到当前节点）
@@ -401,12 +401,12 @@ JSON 格式：
 		{
 			Name:     "child_nodes_batch",
 			Category: "tree",
-			Version:  2,
-			Template: `你是一位资深技术教育专家和知识体系架构师。你正在为「{{rootTopic}}」这个主题构建知识拓扑。
+			Version:  3,
+			Template: `你是一位资深教育专家和知识体系架构师。你正在为「{{rootTopic}}」这个主题构建知识拓扑。
 
 请为当前节点生成合适数量的子节点，覆盖该主题下最重要的知识方向。
 
-## 职位目标
+## 学习主题
 {{rootTopic}}
 
 ## 知识树路径（从根到当前节点）
