@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,6 +32,19 @@ const (
 	ItemFailed    ItemStatus = "failed"
 )
 
+// 重试与失败队列策略
+const (
+	maxWorkers     = 2
+	maxRetries     = 2 // 每个 item 每轮最多重试次数（含首次共 3 次尝试）
+	maxFailurePass = 1 // 主流程结束后对失败项最多再跑的轮数
+)
+
+// childNodeInfo 用于在生成子任务时传递子节点信息
+type childNodeInfo struct {
+	id    string
+	topic string
+}
+
 // QueueItem represents a single task in the batch generation queue.
 type QueueItem struct {
 	ID           string     `json:"id"`
@@ -45,7 +59,12 @@ type QueueItem struct {
 	Status       ItemStatus `json:"status"`
 	Error        string     `json:"error,omitempty"`
 	NodesCreated int        `json:"nodes_created,omitempty"`
+	RetryCount   int        `json:"retry_count,omitempty"`
 	ModelID      string     `json:"-"`
+
+	// ChildrenEnqueued 标记该 node-gen 项的子节点是否已被安排（文章+下一层）。
+	// 用于保证“节点生成成功 ⇒ 恰好入队一次子节点”，无论首次/重试/失败轮。
+	ChildrenEnqueued bool `json:"-"`
 }
 
 // BatchGenTask represents a batch generation task.
@@ -70,14 +89,12 @@ type layerGroupProgress struct {
 
 // SSEEvent is pushed to subscribers via SSE.
 type SSEEvent struct {
-	Type    string      `json:"type"`
+	Type    string `json:"type"`
 	Payload any    `json:"payload"`
-	EventID int64       `json:"event_id"`
+	EventID int64  `json:"event_id"`
 }
 
 // --- Service ---
-
-const maxWorkers = 2
 
 type BatchGenService struct {
 	aiService      *AIService
@@ -86,13 +103,15 @@ type BatchGenService struct {
 	articleRepo    *repository.ArticleRepository
 	nodeContextSvc *NodeContextService
 
-	mu           sync.RWMutex
-	activeTasks  map[string]*BatchGenTask       // treeID -> active task
-	tasksByID    map[string]*BatchGenTask       // taskID -> task
-	taskItems    map[string][]*QueueItem        // taskID -> ordered items
-	layerGroups  map[string]*layerGroupProgress // "taskID:groupKey" -> progress
-	subscribers  map[string][]chan SSEEvent     // treeID -> subscriber channels
-	eventCounter int64
+	mu                sync.RWMutex
+	activeTasks       map[string]*BatchGenTask       // treeID -> active task
+	tasksByID         map[string]*BatchGenTask       // taskID -> task
+	taskItems         map[string][]*QueueItem        // taskID -> ordered items
+	layerGroups       map[string]*layerGroupProgress // groupKey -> progress
+	failurePassCount  map[string]int                 // taskID -> 已执行的失败轮次数
+	subscribers       map[string][]chan SSEEvent     // treeID -> subscriber channels
+	eventCounter      int64
+	groupSeq          int64 // group key 自增序号（保证唯一，避免失败轮级联碰撞）
 
 	taskCh chan *QueueItem
 	ctx    context.Context
@@ -119,6 +138,7 @@ func NewBatchGenService(
 		tasksByID:      make(map[string]*BatchGenTask),
 		taskItems:      make(map[string][]*QueueItem),
 		layerGroups:    make(map[string]*layerGroupProgress),
+		failurePassCount: make(map[string]int),
 		subscribers:    make(map[string][]chan SSEEvent),
 		taskCh:         make(chan *QueueItem, 256),
 		ctx:            ctx,
@@ -159,8 +179,9 @@ func (s *BatchGenService) Start(treeID, rootNodeID string, layers int, modelID s
 
 	s.activeTasks[treeID] = task
 	s.tasksByID[task.ID] = task
+	s.failurePassCount[task.ID] = 0
 
-	groupKey := fmt.Sprintf("%s:L%d-nodes", task.ID, 1)
+	groupKey := s.newGroupKey()
 	s.layerGroups[groupKey] = &layerGroupProgress{Total: 1}
 
 	item := &QueueItem{
@@ -211,7 +232,9 @@ func (s *BatchGenService) Cancel(treeID string) error {
 	return nil
 }
 
-// Retry resets a failed item and re-enqueues it for processing.
+// Retry resets a failed item and re-enqueues it for processing（手动重试）。
+// 重试成功后，若该 node-gen 项的 layer group 已触发，markItemDoneLocked 会通过
+// enqueueChildrenForItemLocked 保证其子节点被正确入队（方案B）。
 func (s *BatchGenService) Retry(treeID, itemID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -240,10 +263,13 @@ func (s *BatchGenService) Retry(treeID, itemID string) error {
 
 	target.Status = ItemPending
 	target.Error = ""
+	target.RetryCount = 0
 	s.enqueueItem(target)
 
 	s.broadcastEventLocked(treeID, "item_retry", map[string]any{
-		"item_id": itemID,
+		"item_id":     target.ID,
+		"retry_count": 0,
+		"manual":      true,
 	})
 
 	return nil
@@ -334,15 +360,15 @@ func (s *BatchGenService) worker() {
 
 func (s *BatchGenService) processItem(item *QueueItem) {
 	// Check cancellation
-	s.mu.RLock()
+	s.mu.Lock()
 	task, ok := s.tasksByID[item.TaskID]
 	if !ok || task.Status == "cancelled" {
-		s.mu.RUnlock()
+		s.mu.Unlock()
 		return
 	}
 	treeID := task.TreeID
 	item.Status = ItemRunning
-	s.mu.RUnlock()
+	s.mu.Unlock()
 
 	s.broadcastEvent(treeID, "item_started", map[string]any{
 		"item_id": item.ID,
@@ -357,7 +383,8 @@ func (s *BatchGenService) processItem(item *QueueItem) {
 		s.processGenerateArticle(item)
 	}
 
-	s.markItemDone(item, treeID)
+	// 失败结果交给 handleItemResult 决定：瞬态重试 / 永久失败
+	s.handleItemResult(item, treeID)
 }
 
 // --- Internal: item processors ---
@@ -449,12 +476,56 @@ func (s *BatchGenService) processGenerateArticle(item *QueueItem) {
 	logger.L.Infof("[BatchGen] 文章生成完成: node=%s", node.Topic)
 }
 
-// --- Internal: completion tracking ---
+// --- Internal: result handling (retry / failure-queue) ---
 
-func (s *BatchGenService) markItemDone(item *QueueItem, treeID string) {
+// handleItemResult 处理一个 item 的执行结果：
+//   - 成功 → markItemDoneLocked
+//   - 瞬态失败且仍有重试次数 → 非阻塞延迟重入队（time.AfterFunc），worker 立即释放
+//   - 永久失败或重试耗尽 → markItemDoneLocked（最终失败）
+//
+// 调用方：processItem（worker 协程）。
+func (s *BatchGenService) handleItemResult(item *QueueItem, treeID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// 成功
+	if item.Error == "" {
+		s.markItemDoneLocked(item, treeID)
+		return
+	}
+
+	// 瞬态失败 + 仍有重试次数：非阻塞退避重试
+	if !isPermanentError(item.Error) && item.RetryCount < maxRetries {
+		item.RetryCount++
+		backoff := backoffDuration(item.RetryCount)
+		retryCount := item.RetryCount
+		reason := item.Error
+		item.Error = ""
+		item.Status = ItemPending // 等待退避后重新入队；非终态，task 不会提前完成
+		logger.L.Infof("[BatchGen] item %s 瞬态失败，第 %d 次重试将在 %v 后入队: %s",
+			item.ID, retryCount, backoff, reason)
+		s.broadcastEventLocked(treeID, "item_retry", map[string]any{
+			"item_id":     item.ID,
+			"retry_count": retryCount,
+			"backoff_ms":  backoff.Milliseconds(),
+			"reason":      reason,
+		})
+		// 退避结束后重新入队；worker 在此期间可处理其它 item（不阻塞并发）
+		time.AfterFunc(backoff, func() {
+			s.enqueueItem(item)
+		})
+		return
+	}
+
+	// 永久失败或重试耗尽
+	logger.L.Errorf("[BatchGen] item %s 最终失败（已重试 %d 次）: %s", item.ID, item.RetryCount, item.Error)
+	s.markItemDoneLocked(item, treeID)
+}
+
+// markItemDoneLocked 将一个 item 置为终态（成功或失败），更新计数、推进 layer barrier、
+// 处理方案B 的子节点传播，并在全部完成时触发失败轮或结束任务。
+// 调用方需持有 s.mu。
+func (s *BatchGenService) markItemDoneLocked(item *QueueItem, treeID string) {
 	// Idempotency: already in terminal state
 	if item.Status == ItemCompleted || item.Status == ItemFailed {
 		return
@@ -477,12 +548,21 @@ func (s *BatchGenService) markItemDone(item *QueueItem, treeID string) {
 		task.FailedItems++
 	}
 
-	// Layer group tracking
+	// Layer barrier：等该组所有 item 终态后再安排下一层
 	if group, ok := s.layerGroups[item.LayerGroup]; ok && !group.Triggered {
 		group.Completed++
 		if group.Completed == group.Total {
 			group.Triggered = true
 			s.enqueueNextLayerLocked(task, item)
+		}
+	}
+
+	// 方案B：node-gen 项成功，但其所在 group 已触发（属于重试/失败轮的“迟到成功”），
+	// 需单独为其入队子节点。barrier 路径里 enqueueNextLayerLocked 已设 ChildrenEnqueued，
+	// 此处 !ChildrenEnqueued 守卫保证恰好入队一次。
+	if item.Status == ItemCompleted && item.Type == ItemGenerateNodes && !item.ChildrenEnqueued {
+		if g, ok := s.layerGroups[item.LayerGroup]; !ok || g.Triggered {
+			s.enqueueChildrenForItemLocked(task, item)
 		}
 	}
 
@@ -505,14 +585,18 @@ func (s *BatchGenService) markItemDone(item *QueueItem, treeID string) {
 		})
 	}
 
-	// Task completion check
+	// 全部终态：决定失败轮或结束任务
 	if s.isTaskCompleteLocked(task) {
-		task.Status = "completed"
-		s.broadcastEventLocked(treeID, "task_completed", map[string]any{
-			"task_id":  task.ID,
-			"completed": task.CompletedItems,
-			"failed":   task.FailedItems,
-		})
+		if s.failurePassCount[task.ID] < maxFailurePass && s.hasFailedItemsLocked(task) {
+			s.startFailurePassLocked(task, treeID)
+		} else {
+			task.Status = "completed"
+			s.broadcastEventLocked(treeID, "task_completed", map[string]any{
+				"task_id":   task.ID,
+				"completed": task.CompletedItems,
+				"failed":    task.FailedItems,
+			})
+		}
 	}
 
 	s.broadcastEventLocked(treeID, "progress", map[string]any{
@@ -522,17 +606,16 @@ func (s *BatchGenService) markItemDone(item *QueueItem, treeID string) {
 	})
 }
 
+// enqueueNextLayerLocked 在某 layer group 的 barrier 打破时调用：
+// 收集该组所有“成功且尚未入队子节点”的 node-gen 项的子节点，统一安排文章+下一层。
 func (s *BatchGenService) enqueueNextLayerLocked(task *BatchGenTask, triggerItem *QueueItem) {
-	type childInfo struct {
-		id    string
-		topic string
-	}
-	var allChildren []childInfo
+	var allChildren []childNodeInfo
 
 	for _, it := range s.taskItems[task.ID] {
 		if it.LayerGroup == triggerItem.LayerGroup &&
 			it.Type == ItemGenerateNodes &&
-			it.Status == ItemCompleted {
+			it.Status == ItemCompleted &&
+			!it.ChildrenEnqueued {
 
 			children, err := s.nodeRepo.FindChildren(it.NodeID)
 			if err != nil {
@@ -540,8 +623,9 @@ func (s *BatchGenService) enqueueNextLayerLocked(task *BatchGenTask, triggerItem
 				continue
 			}
 			for _, c := range children {
-				allChildren = append(allChildren, childInfo{c.ID.String(), c.Topic})
+				allChildren = append(allChildren, childNodeInfo{c.ID.String(), c.Topic})
 			}
+			it.ChildrenEnqueued = true
 		}
 	}
 
@@ -549,14 +633,60 @@ func (s *BatchGenService) enqueueNextLayerLocked(task *BatchGenTask, triggerItem
 		return
 	}
 
+	newItems := s.spawnChildTasksLocked(task, triggerItem, allChildren)
+
+	s.broadcastEventLocked(task.TreeID, "queue_update", map[string]any{
+		"total_items":   task.TotalItems,
+		"current_layer": triggerItem.Layer,
+		"next_layer":    triggerItem.Layer + 1,
+		"new_items":     newItems,
+	})
+}
+
+// enqueueChildrenForItemLocked 方案B：为单个“迟到成功”的 node-gen 项入队其子节点。
+// 用于重试成功 / 失败轮成功（此时 layer group 已触发，barrier 路径不会再处理它）。
+func (s *BatchGenService) enqueueChildrenForItemLocked(task *BatchGenTask, item *QueueItem) {
+	if item.Type != ItemGenerateNodes || item.ChildrenEnqueued {
+		return
+	}
+	item.ChildrenEnqueued = true
+
+	children, err := s.nodeRepo.FindChildren(item.NodeID)
+	if err != nil {
+		logger.L.Errorf("[BatchGen] 查询子节点失败: %v", err)
+		return
+	}
+	if len(children) == 0 {
+		return
+	}
+
+	childInfos := make([]childNodeInfo, 0, len(children))
+	for _, c := range children {
+		childInfos = append(childInfos, childNodeInfo{c.ID.String(), c.Topic})
+	}
+
+	newItems := s.spawnChildTasksLocked(task, item, childInfos)
+
+	s.broadcastEventLocked(task.TreeID, "queue_update", map[string]any{
+		"total_items":   task.TotalItems,
+		"current_layer": item.Layer,
+		"next_layer":    item.Layer + 1,
+		"new_items":     newItems,
+	})
+}
+
+// spawnChildTasksLocked 为一组子节点创建并入队：文章任务（当前层）+ 下一层节点生成任务（若未达 TargetLayers）。
+// parent.Layer 为父节点的生成层；子节点文章项用 parent.Layer，下一层节点项用 parent.Layer+1。
+// 调用方需持有 s.mu。
+func (s *BatchGenService) spawnChildTasksLocked(task *BatchGenTask, parent *QueueItem, children []childNodeInfo) []*QueueItem {
+	currentLayer := parent.Layer
+	nextLayer := currentLayer + 1
 	var newItems []*QueueItem
-	currentLayer := triggerItem.Layer
 
-	// Enqueue article tasks for child nodes
-	articleGroupKey := fmt.Sprintf("%s:L%d-articles", task.ID, currentLayer)
-	s.layerGroups[articleGroupKey] = &layerGroupProgress{Total: len(allChildren)}
-
-	for _, child := range allChildren {
+	// 文章任务（为每个子节点生成一篇）
+	articleGroupKey := s.newGroupKey()
+	s.layerGroups[articleGroupKey] = &layerGroupProgress{Total: len(children)}
+	for _, child := range children {
 		articleItem := &QueueItem{
 			ID:         uuid.New().String(),
 			TaskID:     task.ID,
@@ -575,13 +705,11 @@ func (s *BatchGenService) enqueueNextLayerLocked(task *BatchGenTask, triggerItem
 		s.enqueueItem(articleItem)
 	}
 
-	// Enqueue next layer node generation (if more layers remain)
-	nextLayer := currentLayer + 1
+	// 下一层节点生成（未达深度上限时）
 	if nextLayer <= task.TargetLayers {
-		nodeGroupKey := fmt.Sprintf("%s:L%d-nodes", task.ID, nextLayer)
-		s.layerGroups[nodeGroupKey] = &layerGroupProgress{Total: len(allChildren)}
-
-		for _, child := range allChildren {
+		nodeGroupKey := s.newGroupKey()
+		s.layerGroups[nodeGroupKey] = &layerGroupProgress{Total: len(children)}
+		for _, child := range children {
 			nodeItem := &QueueItem{
 				ID:         uuid.New().String(),
 				TaskID:     task.ID,
@@ -601,12 +729,53 @@ func (s *BatchGenService) enqueueNextLayerLocked(task *BatchGenTask, triggerItem
 		}
 	}
 
-	s.broadcastEventLocked(task.TreeID, "queue_update", map[string]any{
-		"total_items":   task.TotalItems,
-		"current_layer": currentLayer,
-		"next_layer":    nextLayer,
-		"new_items":     newItems,
+	return newItems
+}
+
+// startFailurePassLocked 在主流程全部终态后，把所有失败项重置并重新入队（失败队列）。
+// 失败项重新获得完整的重试预算（RetryCount=0）。每项成功后由方案B 保证子节点传播。
+// 调用方需持有 s.mu。
+func (s *BatchGenService) startFailurePassLocked(task *BatchGenTask, treeID string) {
+	s.failurePassCount[task.ID]++
+	pass := s.failurePassCount[task.ID]
+
+	var reset []*QueueItem
+	for _, it := range s.taskItems[task.ID] {
+		if it.Status == ItemFailed {
+			it.Status = ItemPending
+			it.Error = ""
+			it.RetryCount = 0
+			task.FailedItems--
+			reset = append(reset, it)
+		}
+	}
+
+	logger.L.Infof("[BatchGen] 启动失败轮 #%d：重置 %d 个失败项", pass, len(reset))
+
+	s.broadcastEventLocked(treeID, "failure_pass_started", map[string]any{
+		"task_id": task.ID,
+		"pass":    pass,
+		"count":   len(reset),
 	})
+
+	for _, it := range reset {
+		s.broadcastEventLocked(treeID, "item_retry", map[string]any{
+			"item_id":      it.ID,
+			"retry_count":  0,
+			"failure_pass": true,
+		})
+		s.enqueueItem(it)
+	}
+}
+
+// hasFailedItemsLocked 判断任务中是否还有失败项。调用方需持有 s.mu。
+func (s *BatchGenService) hasFailedItemsLocked(task *BatchGenTask) bool {
+	for _, it := range s.taskItems[task.ID] {
+		if it.Status == ItemFailed {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *BatchGenService) isTaskCompleteLocked(task *BatchGenTask) bool {
@@ -616,6 +785,33 @@ func (s *BatchGenService) isTaskCompleteLocked(task *BatchGenTask) bool {
 		}
 	}
 	return true
+}
+
+// newGroupKey 生成唯一的 layer group 键（自增），避免失败轮/重试级联时键碰撞。
+// 调用方需持有 s.mu。
+func (s *BatchGenService) newGroupKey() string {
+	s.groupSeq++
+	return fmt.Sprintf("g%d", s.groupSeq)
+}
+
+// isPermanentError 判断是否为“不可重试”的永久性错误（认证/欠费/参数）。
+// 其余错误（429 / 5xx / 超时 / 网络 / 解析 / 空响应）视为瞬态，可重试。
+func isPermanentError(errMsg string) bool {
+	return strings.Contains(errMsg, "认证失败") ||
+		strings.Contains(errMsg, "余额不足") ||
+		strings.Contains(errMsg, "参数错误")
+}
+
+// backoffDuration 返回第 retryCount 次重试前的非阻塞退避时长。
+func backoffDuration(retryCount int) time.Duration {
+	switch retryCount {
+	case 1:
+		return 2 * time.Second
+	case 2:
+		return 5 * time.Second
+	default:
+		return 5 * time.Second
+	}
 }
 
 // --- Internal: SSE broadcast ---
