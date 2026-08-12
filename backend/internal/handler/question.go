@@ -92,11 +92,18 @@ func (h *QuestionHandler) Create(c *gin.Context) {
 		ancestors = nil
 	}
 
-	// Generate single question using AI with deduplication
-	logger.L.Infof("[Question] Generating question for node: %s (topic=%s), existing count: %d, ancestors count: %d",
-		nodeID, node.Topic, len(existingQuestions), len(ancestors))
+	// Get siblings using NodeContextService（与文章生成保持一致，注入兄弟节点上下文）
+	siblings, err := h.nodeContextSvc.GetSiblings(nodeID)
+	if err != nil {
+		logger.L.Errorf("[Question] Failed to get siblings: %v, continuing without siblings", err)
+		siblings = nil
+	}
 
-	result, err := h.aiService.GenerateSingleQuestion(node.Topic, node.Description, ancestors, existingQuestions, req.Model)
+	// Generate single question using AI with deduplication
+	logger.L.Infof("[Question] Generating question for node: %s (topic=%s), existing count: %d, ancestors count: %d, siblings count: %d",
+		nodeID, node.Topic, len(existingQuestions), len(ancestors), len(siblings))
+
+	result, err := h.aiService.GenerateSingleQuestion(node.Topic, node.Description, ancestors, siblings, existingQuestions, req.Model)
 	if err != nil {
 		logger.L.Errorf("[Question] AI generation failed: %v", err)
 		response.InternalError(c, err.Error())

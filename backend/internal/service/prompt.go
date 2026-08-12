@@ -221,7 +221,7 @@ func (s *PromptService) InitDefaultPrompts() error {
 		{
 			Name:     "expand_node",
 			Category: "tree",
-			Version:  2,
+			Version:  3,
 			Template: `你是一位专业的知识教育专家和知识拓扑构建专家。
 
 当前节点信息：
@@ -240,7 +240,7 @@ func (s *PromptService) InitDefaultPrompts() error {
       "name": "子节点名称",
       "description": "描述",
       "importance": "high/medium/low",
-      "difficulty": 1-5,
+      "difficulty": 3,
       "practice_questions": [
         {
           "question": "练习题",
@@ -255,7 +255,7 @@ func (s *PromptService) InitDefaultPrompts() error {
 		{
 			Name:     "root_node_info",
 			Category: "tree",
-			Version:  3,
+			Version:  4,
 			Template: `你是一位资深的教育专家和学习规划师。请为以下学习主题生成知识拓扑的根节点信息。
 
 学习主题：{{topic}}
@@ -266,8 +266,8 @@ func (s *PromptService) InitDefaultPrompts() error {
 3. 不要有前言、结语或解释
 4. 用中文输出描述内容
 
-JSON 格式：
-{"description":"该主题的详细概述和学习目标（100-200字，用中文）","importance":"high/medium/low","difficulty":1-5}
+JSON 格式（importance 取 high/medium/low，difficulty 取 1-5 的整数）：
+{"description":"该主题的详细概述和学习目标（100-200字，用中文）","importance":"high","difficulty":3}
 
 示例：
 {"description":"人工智能是计算机科学的重要分支，研究如何让机器模拟人类智能行为。核心领域包括机器学习、深度学习、自然语言处理、计算机视觉和强化学习等。学习路径涵盖数学基础、算法原理、模型训练与工程实践，是当今科技领域最前沿且应用广泛的方向之一。","importance":"high","difficulty":4}
@@ -312,7 +312,7 @@ JSON 格式：
 		{
 			Name:     "generate_article",
 			Category: "article",
-			Version:  3,
+			Version:  4,
 			Template: `你是一位资深的教育专家和知识学习导师。请为以下学习路径中的当前节点生成一篇深入、全面的知识点文章。
 
 {{ancestors}}{{siblings}}当前节点信息：
@@ -335,7 +335,7 @@ JSON 格式：
 JSON 格式：
 {
   "title": "文章标题（简洁明了）",
-  "content": "Markdown 格式的文章内容，必须包含以下章节：\n## 概述\n（当前主题在知识体系中的位置，与父主题的关系）\n## 前置知识\n（理解本主题需要的基础知识）\n## 核心概念\n（详细解释核心概念和术语）\n## 深入原理\n（底层原理、实现机制的深入分析）\n## 关键知识点\n（逐条详细讲解重要知识点）\n## 代码示例\n（实际代码示例和详细注释）\n## 与相关主题的关联\n（与兄弟节点主题的对比和联系）\n## 常见误区\n（初学者容易犯的错误和误解）\n## 高频考点\n（3-5 个常见问题及详细解答）\n## 实践建议\n（实际项目中的最佳实践和注意事项）"
+  "content": "Markdown 格式的文章内容，必须包含以下适用于任何学科的通用章节：\n## 概述\n（当前主题在知识体系中的位置，与父主题的关系）\n## 前置知识\n（理解本主题需要的基础知识）\n## 核心概念\n（详细解释核心概念和术语）\n## 深入原理\n（底层原理或机制的深入分析；理论类主题可改为推导/论证）\n## 关键知识点\n（逐条详细讲解重要知识点）\n## 与相关主题的关联\n（与兄弟节点主题的对比和联系）\n## 常见误区\n（初学者容易犯的错误和误解）\n## 学习与实践建议\n（按主题领域自适应：技术/工程类可含代码示例与工程实践，理论/数学类可含推导与习题思路，应试类可含高频考点，通识/兴趣类给出学习路径与资源）"
 }
 
 开始生成，只返回 JSON 对象：`,
@@ -343,19 +343,20 @@ JSON 格式：
 		{
 			Name:     "generate_single_question",
 			Category: "quiz",
-			Version:  3,
+			Version:  4,
 			Template: `你是一位专业的知识教育专家。请为以下学习路径中的最后一个节点生成一道练习题。
 
-{{ancestors}}当前节点信息：
+{{ancestors}}{{siblings}}当前节点信息：
 - 主题：{{topic}}
 - 描述：{{description}}{{existing}}
 
 要求：
 1. 只返回纯 JSON 对象，不要任何其他文字
-2. **JSON 格式必须正确**：content 中的所有双引号必须转义为 \"
+2. **JSON 格式必须正确**：answer 字段中的双引号必须转义为 \"、换行符必须转义为 \n、反斜杠必须转义为 \\
 3. 不要使用 markdown 代码块标记
 4. 不要生成与已有问题重复或相似的问题
 5. 根据祖先路径理解整体学习上下文，确保问题与前置知识连贯
+6. 如果提供了兄弟节点，问题必须聚焦当前节点主题，不要问及兄弟节点的主题
 
 JSON 格式：
 {"question":"练习题问题","answer":"参考答案（详细，用 Markdown 格式）","tags":["相关技术标签"]}
@@ -368,7 +369,7 @@ JSON 格式：
 		{
 			Name:     "child_node_info",
 			Category: "tree",
-			Version:  3,
+			Version:  4,
 			Template: `你是一位资深教育专家和知识体系架构师。你正在为「{{rootTopic}}」这个主题构建知识拓扑。
 
 请为当前节点生成【严格一个】新的子节点。注意：只生成一个，不要生成多个。
@@ -391,17 +392,17 @@ JSON 格式：
 
 ## 禁止生成
 - 与已有子节点重复或高度重叠的主题
-- 过于宽泛的主题（如"其他"、"综合"、"进阶"、"基础"）
+- 过于宽泛、无信息量的主题（如单独使用“其他”“综合”“进阶”等笼统词，而不是具体的知识领域）
 - 与「{{rootTopic}}」无关的边缘话题
 - 过于理论化缺乏实践意义的主题
 
-JSON 格式：
-{"topic":"子主题名称","description":"知识相关描述","importance":"high/medium/low","difficulty":1-5}`,
+JSON 格式（importance 取 high/medium/low，difficulty 取 1-5 的整数）：
+{"topic":"子主题名称","description":"知识相关描述","importance":"high","difficulty":3}`,
 		},
 		{
 			Name:     "child_nodes_batch",
 			Category: "tree",
-			Version:  3,
+			Version:  4,
 			Template: `你是一位资深教育专家和知识体系架构师。你正在为「{{rootTopic}}」这个主题构建知识拓扑。
 
 请为当前节点生成合适数量的子节点，覆盖该主题下最重要的知识方向。
@@ -425,13 +426,13 @@ JSON 格式：
 7. 只返回纯 JSON 数组，不要任何其他文字或 markdown 标记
 
 ## 禁止生成
-- 过于宽泛的主题（如"其他"、"综合"、"进阶"、"基础"）
+- 过于宽泛、无信息量的主题（如单独使用“其他”“综合”“进阶”等笼统词，而不是具体的知识领域）
 - 与「{{rootTopic}}」无关的边缘话题
 - 过于理论化缺乏实践意义的主题
 - 主题之间高度重叠
 
-JSON 格式：
-[{"topic":"子主题名称","description":"知识相关描述","importance":"high/medium/low","difficulty":1-5}]`,
+JSON 格式（importance 取 high/medium/low，difficulty 取 1-5 的整数）：
+[{"topic":"子主题名称","description":"知识相关描述","importance":"high","difficulty":3}]`,
 		},
 	}
 

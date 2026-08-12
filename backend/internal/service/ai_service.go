@@ -101,7 +101,7 @@ func (s *AIService) GenerateQuiz(request model.GenerateQuizRequest, modelID ...s
 	logger.L.Infof("[AI] AI 响应: %s", response)
 
 	var result model.QuizResponse
-	if err := json.Unmarshal([]byte(response), &result); err != nil {
+	if err := json.Unmarshal([]byte(cleanAIResponse(response)), &result); err != nil {
 		logger.L.Errorf("[AI] 解析 AI 响应失败: %v", err)
 		return nil, fmt.Errorf("AI 返回数据格式异常，请重试")
 	}
@@ -139,42 +139,9 @@ func (s *AIService) ExplainNode(topic string, modelID ...string) (string, error)
 
 // GenerateArticle 生成知识点文章（针对当前节点，包含祖先路径和兄弟节点上下文）
 func (s *AIService) GenerateArticle(topic string, description string, ancestors []model.AncestorInfo, siblings []model.SiblingInfo, modelID ...string) (string, error) {
-	// 构建祖先路径上下文
-	var ancestorsStr string
-	if len(ancestors) > 0 {
-		var builder strings.Builder
-		builder.WriteString("\n完整学习路径（从根节点到当前节点的父节点）：\n")
-		for _, anc := range ancestors {
-			builder.WriteString(strings.Repeat("  ", anc.Depth))
-			builder.WriteString("└─ ")
-			builder.WriteString(anc.Topic)
-			builder.WriteString(" (重要性: ")
-			builder.WriteString(anc.Importance)
-			builder.WriteString(")\n")
-		}
-		builder.WriteString("\n")
-		ancestorsStr = builder.String()
-	}
-
-	// 构建兄弟节点上下文
-	var siblingsStr string
-	if len(siblings) > 0 {
-		var builder strings.Builder
-		builder.WriteString("\n同级知识节点（兄弟节点）：\n")
-		for _, sib := range siblings {
-			builder.WriteString("- ")
-			builder.WriteString(sib.Topic)
-			if sib.Description != "" {
-				builder.WriteString("：")
-				builder.WriteString(sib.Description)
-			}
-			builder.WriteString(" (重要性: ")
-			builder.WriteString(sib.Importance)
-			builder.WriteString(")\n")
-		}
-		builder.WriteString("\n")
-		siblingsStr = builder.String()
-	}
+	// 构建祖先路径与兄弟节点上下文（与练习题生成保持一致的展示格式）
+	ancestorsStr := buildAncestorContext(ancestors)
+	siblingsStr := buildSiblingContext(siblings)
 
 	// 获取提示词模板
 	template := s.getPromptOrDefault("generate_article", "")
@@ -203,7 +170,7 @@ func (s *AIService) GenerateArticle(topic string, description string, ancestors 
 	}
 
 	var result ArticleResponse
-	if err := json.Unmarshal([]byte(response), &result); err != nil {
+	if err := json.Unmarshal([]byte(cleanAIResponse(response)), &result); err != nil {
 		// 记录解析失败的响应（截断避免日志过大）
 		truncated := response
 		if len(truncated) > 500 {
@@ -217,30 +184,17 @@ func (s *AIService) GenerateArticle(topic string, description string, ancestors 
 	return result.Content, nil
 }
 
-// GenerateSingleQuestion 生成单个练习题（避免重复，包含祖先路径上下文）
-func (s *AIService) GenerateSingleQuestion(topic string, description string, ancestors []model.AncestorInfo, existingQuestions []string, modelID ...string) (*model.SingleQuestionResponse, error) {
+// GenerateSingleQuestion 生成单个练习题（避免重复，包含祖先路径与兄弟节点上下文）
+func (s *AIService) GenerateSingleQuestion(topic string, description string, ancestors []model.AncestorInfo, siblings []model.SiblingInfo, existingQuestions []string, modelID ...string) (*model.SingleQuestionResponse, error) {
 	// 构建已有问题列表
 	existingStr := ""
 	if len(existingQuestions) > 0 {
 		existingStr = "\n\n请注意：以下问题已存在，不要生成重复或相似的：\n- " + strings.Join(existingQuestions, "\n- ")
 	}
 
-	// 构建祖先路径上下文
-	var ancestorsStr string
-	if len(ancestors) > 0 {
-		var builder strings.Builder
-		builder.WriteString("\n完整学习路径（从根节点到当前节点的父节点）：\n")
-		for _, anc := range ancestors {
-			builder.WriteString(strings.Repeat("  ", anc.Depth))
-			builder.WriteString("└─ ")
-			builder.WriteString(anc.Topic)
-			builder.WriteString(" (重要性: ")
-			builder.WriteString(anc.Importance)
-			builder.WriteString(")\n")
-		}
-		builder.WriteString("\n")
-		ancestorsStr = builder.String()
-	}
+	// 构建祖先路径与兄弟节点上下文（与文章生成保持一致的展示格式）
+	ancestorsStr := buildAncestorContext(ancestors)
+	siblingsStr := buildSiblingContext(siblings)
 
 	// 获取提示词模板
 	template := s.getPromptOrDefault("generate_single_question", "")
@@ -251,11 +205,12 @@ func (s *AIService) GenerateSingleQuestion(topic string, description string, anc
 		"topic":       topic,
 		"description": description,
 		"ancestors":   ancestorsStr,
+		"siblings":    siblingsStr,
 		"existing":    existingStr,
 	})
 
 
-	logger.L.Infof("[AI] 正在调用 AI 生成练习题: topic=%s, existingCount=%d, ancestorsCount=%d", topic, len(existingQuestions), len(ancestors))
+	logger.L.Infof("[AI] 正在调用 AI 生成练习题: topic=%s, existingCount=%d, ancestorsCount=%d, siblingsCount=%d", topic, len(existingQuestions), len(ancestors), len(siblings))
 	response, err := s.callAI(prompt, modelID...)
 	if err != nil {
 		logger.L.Errorf("[AI] AI 调用失败: %v", err)
@@ -263,20 +218,11 @@ func (s *AIService) GenerateSingleQuestion(topic string, description string, anc
 	}
 	logger.L.Infof("[AI] AI 响应 (前200字符): %s", response[:min(200, len(response))])
 
-	// 尝试解析 AI 返回的 JSON
+	// 解析 AI 返回的 JSON（统一清理 markdown 代码块）
 	var result model.SingleQuestionResponse
-	if err := json.Unmarshal([]byte(response), &result); err != nil {
+	if err := json.Unmarshal([]byte(cleanAIResponse(response)), &result); err != nil {
 		logger.L.Errorf("[AI] 解析 AI 响应 JSON 失败: %v", err)
-		// 尝试清理响应中的 markdown 代码块
-		cleanedResponse := strings.TrimSpace(response)
-		cleanedResponse = strings.TrimPrefix(cleanedResponse, "```json")
-		cleanedResponse = strings.TrimPrefix(cleanedResponse, "```")
-		cleanedResponse = strings.TrimSuffix(cleanedResponse, "```")
-		cleanedResponse = strings.TrimSpace(cleanedResponse)
-
-		if err := json.Unmarshal([]byte(cleanedResponse), &result); err != nil {
-			return nil, fmt.Errorf("AI 返回数据格式异常，请重试")
-		}
+		return nil, fmt.Errorf("AI 返回数据格式异常，请重试")
 	}
 
 	// 验证数据有效性
@@ -494,9 +440,9 @@ func (s *AIService) GenerateRootNodeInfo(topic string, modelID ...string) (*mode
 	}
 	logger.L.Infof("[AI] AI 响应: %s", response)
 
-	// 尝试解析 AI 返回的 JSON
+	// 尝试解析 AI 返回的 JSON（统一清理 markdown 代码块）
 	var result model.RootNodeInfo
-	if err := json.Unmarshal([]byte(response), &result); err != nil {
+	if err := json.Unmarshal([]byte(cleanAIResponse(response)), &result); err != nil {
 		logger.L.Errorf("[AI] 解析 AI 响应 JSON 失败: %v", err)
 		return nil, fmt.Errorf("AI 返回数据格式异常，请重试")
 	}
@@ -562,10 +508,11 @@ func (s *AIService) GenerateRootNodeInfoWithPrompt(topic string, promptID string
 	}
 	logger.L.Infof("[AI] AI 响应 (前200字符): %s", response[:min(200, len(response))])
 
-	// 尝试解析 AI 返回的 JSON
+	// 尝试解析 AI 返回的 JSON（统一清理 markdown 代码块）
 	var result model.RootNodeInfo
-	if err := json.Unmarshal([]byte(response), &result); err != nil {
-		// 如果解析失败，使用默认值
+	if err := json.Unmarshal([]byte(cleanAIResponse(response)), &result); err != nil {
+		// 解析失败时记录警告并降级为默认值，避免静默拖盖自定义提示词的问题
+		logger.L.Warnf("[AI] 自定义提示词返回内容解析失败，降级为默认根节点信息: prompt=%s, err=%v", prompt.Name, err)
 		return &model.RootNodeInfo{
 			Description: fmt.Sprintf("系统性地学习 %s 相关知识，掌握核心概念和实践技能。", topic),
 			Importance:  "high",
@@ -587,13 +534,62 @@ func (s *AIService) GenerateRootNodeInfoWithPrompt(topic string, promptID string
 	return &result, nil
 }
 
-// cleanAIResponse 清理 AI 响应中的 markdown 代码块
+// cleanAIResponse 清理 AI 响应中的 markdown 代码块（兼容 ```json / ```JSON / ``` 等任意语言标记）
 func cleanAIResponse(raw string) string {
 	cleaned := strings.TrimSpace(raw)
-	cleaned = strings.TrimPrefix(cleaned, "```json")
-	cleaned = strings.TrimPrefix(cleaned, "```")
+	// 去除开头的代码块围栏（```json、```JSON、``` 等，围栏后通常接换行）
+	if strings.HasPrefix(cleaned, "```") {
+		if nl := strings.IndexByte(cleaned, '\n'); nl >= 0 {
+			cleaned = cleaned[nl+1:]
+		} else {
+			cleaned = strings.TrimPrefix(cleaned, "```")
+		}
+	}
+	// 去除结尾的代码块围栏
+	cleaned = strings.TrimSpace(cleaned)
 	cleaned = strings.TrimSuffix(cleaned, "```")
 	return strings.TrimSpace(cleaned)
+}
+
+// buildAncestorContext 构建祖先路径上下文（文章/题目生成共用，保持一致的展示格式）
+func buildAncestorContext(ancestors []model.AncestorInfo) string {
+	if len(ancestors) == 0 {
+		return ""
+	}
+	var builder strings.Builder
+	builder.WriteString("\n完整学习路径（从根节点到当前节点的父节点）：\n")
+	for _, anc := range ancestors {
+		builder.WriteString(strings.Repeat("  ", anc.Depth))
+		builder.WriteString("└─ ")
+		builder.WriteString(anc.Topic)
+		builder.WriteString(" (重要性: ")
+		builder.WriteString(anc.Importance)
+		builder.WriteString(")\n")
+	}
+	builder.WriteString("\n")
+	return builder.String()
+}
+
+// buildSiblingContext 构建兄弟节点上下文（文章/题目生成共用，保持一致的展示格式）
+func buildSiblingContext(siblings []model.SiblingInfo) string {
+	if len(siblings) == 0 {
+		return ""
+	}
+	var builder strings.Builder
+	builder.WriteString("\n同级知识节点（兄弟节点）：\n")
+	for _, sib := range siblings {
+		builder.WriteString("- ")
+		builder.WriteString(sib.Topic)
+		if sib.Description != "" {
+			builder.WriteString("：")
+			builder.WriteString(sib.Description)
+		}
+		builder.WriteString(" (重要性: ")
+		builder.WriteString(sib.Importance)
+		builder.WriteString(")\n")
+	}
+	builder.WriteString("\n")
+	return builder.String()
 }
 
 // parseChildNodeInfoList 解析 AI 响应为 ChildNodeInfo 列表，兼容三种格式：
