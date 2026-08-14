@@ -17,6 +17,7 @@ import (
 type ArticleHandler struct {
 	articleRepo    *repository.ArticleRepository
 	nodeRepo       *repository.NodeRepository
+	treeRepo       *repository.TreeRepository
 	aiService      *service.AIService
 	nodeContextSvc *service.NodeContextService
 }
@@ -24,12 +25,14 @@ type ArticleHandler struct {
 func NewArticleHandler(
 	articleRepo *repository.ArticleRepository,
 	nodeRepo *repository.NodeRepository,
+	treeRepo *repository.TreeRepository,
 	aiService *service.AIService,
 	nodeContextSvc *service.NodeContextService,
 ) *ArticleHandler {
 	return &ArticleHandler{
 		articleRepo:    articleRepo,
 		nodeRepo:       nodeRepo,
+		treeRepo:       treeRepo,
 		aiService:      aiService,
 		nodeContextSvc: nodeContextSvc,
 	}
@@ -190,8 +193,15 @@ func (h *ArticleHandler) generateAndSave(nodeID string, modelID string) (*model.
 		siblings = nil
 	}
 
+	// 模式来自树（单一事实来源），决定文章提示词与标题
+	tree, err := h.treeRepo.FindByID(node.TreeID.String())
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch tree: %w", err)
+	}
+	treeMode := service.NormalizeTreeMode(tree.Mode)
+
 	// Generate article with full context
-	content, err := h.aiService.GenerateArticle(node.Topic, node.Description, ancestors, siblings, modelID)
+	content, err := h.aiService.GenerateArticle(node.Topic, node.Description, ancestors, siblings, treeMode, modelID)
 	if err != nil {
 		return nil, fmt.Errorf("%w", err)
 	}
@@ -199,7 +209,7 @@ func (h *ArticleHandler) generateAndSave(nodeID string, modelID string) (*model.
 	article := &model.Article{
 		ID:        uuid.New(),
 		NodeID:    uuid.MustParse(nodeID),
-		Title:     node.Topic + " 知识点详解",
+		Title:     node.Topic + service.ArticleTitleSuffix(treeMode),
 		Content:   content,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),

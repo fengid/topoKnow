@@ -4,7 +4,9 @@ import { motion, useMotionValue, useTransform, animate } from 'framer-motion'
 import { ArrowRight, Loader2 } from 'lucide-react'
 import { treeApi } from '@/services/api'
 import Navbar from '@/components/Navbar'
+import { TreeModeToggle } from '@/features/tree/components'
 import { NoiseOverlay, AmbientBackground } from '@/components/shared'
+import type { TreeMode } from '@/types'
 
 /* ─── Floating particle node ─── */
 function FloatingNode({ label, x, y, delay }: { label: string; x: number; y: number; delay: number }) {
@@ -68,6 +70,8 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(false)
   const [inputFocused, setInputFocused] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  // 树的模式：创建时选定，决定节点划分与文章结构
+  const [treeMode, setTreeMode] = useState<TreeMode>('understanding')
 
   const startLearning = async (topic: string) => {
     const trimmedTopic = topic.trim()
@@ -75,7 +79,7 @@ export default function HomePage() {
     setIsLoading(true)
     setErrorMessage('')
     try {
-      const response = await treeApi.create(trimmedTopic)
+      const response = await treeApi.create(trimmedTopic, treeMode)
       if (response.data.success && response.data.data) {
         navigate(`/tree/${response.data.data.id}`)
       } else {
@@ -152,6 +156,9 @@ export default function HomePage() {
             </motion.p>
 
             {/* Search bar */}
+            <motion.div variants={stagger.item} className="relative max-w-xl mx-auto mb-4 flex justify-center">
+              <TreeModeToggle mode={treeMode} onChange={setTreeMode} disabled={isLoading} />
+            </motion.div>
             <motion.div variants={stagger.item} className="relative max-w-xl mx-auto mb-8">
               <div
                 className="relative rounded-2xl transition-all duration-500"

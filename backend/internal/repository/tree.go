@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"errors"
 	"topoknow-backend/internal/model"
 
 	"gorm.io/gorm"
@@ -85,17 +86,20 @@ func (r *TreeRepository) Delete(id string) error {
 	})
 }
 
-func (r *TreeRepository) FindByRootTopicWithRootNode(rootTopic string) (*model.Tree, error) {
+// ErrRootNodeMissing 树记录存在但根节点缺失（脏数据），调用方应报错而非当作树不存在
+var ErrRootNodeMissing = errors.New("root node missing for tree")
+
+// FindByTopicAndModeWithRootNode 按主题 + 模式查找树（同主题两种模式各存一棵）
+func (r *TreeRepository) FindByTopicAndModeWithRootNode(rootTopic, mode string) (*model.Tree, error) {
 	var tree model.Tree
-	err := r.DB().Where("LOWER(root_topic) = LOWER(?)", rootTopic).First(&tree).Error
+	err := r.DB().Where("LOWER(root_topic) = LOWER(?) AND mode = ?", rootTopic, mode).First(&tree).Error
 	if err != nil {
 		return nil, err
 	}
 
-	// Find root node (depth = 0)
 	var rootNode model.Node
 	if err := r.DB().Where("tree_id = ? AND depth = 0", tree.ID).First(&rootNode).Error; err != nil {
-		return nil, gorm.ErrRecordNotFound
+		return nil, ErrRootNodeMissing
 	}
 	tree.RootNode = &rootNode
 

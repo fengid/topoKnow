@@ -142,7 +142,7 @@ export default function MyTreesPage() {
               animate="visible"
               variants={stagger.container}
             >
-              {trees.map((tree: { id: string | number; root_topic?: string; created_at?: string }) => (
+              {trees.map((tree: { id: string | number; root_topic?: string; mode?: string; created_at?: string }) => (
                 <motion.div
                   key={tree.id}
                   variants={stagger.item}
@@ -166,6 +166,16 @@ export default function MyTreesPage() {
                       <h3 className="font-playfair text-lg truncate" style={{ color: 'var(--home-text)' }}>
                         {tree.root_topic || '未命名'}
                       </h3>
+                      <span
+                        className="inline-block mt-1.5 px-2 py-0.5 text-[10px] font-outfit tracking-widest rounded-full"
+                        style={{
+                          border: '1px solid rgba(201,169,110,0.25)',
+                          background: (tree.mode ?? 'understanding') === 'interview' ? 'rgba(48,209,88,0.08)' : 'rgba(201,169,110,0.06)',
+                          color: (tree.mode ?? 'understanding') === 'interview' ? 'var(--ios-accent-green)' : 'var(--home-gold-text)',
+                        }}
+                      >
+                        {(tree.mode ?? 'understanding') === 'interview' ? '面试模式' : '理解模式'}
+                      </span>
                       {tree.created_at && (
                         <p className="font-outfit text-xs mt-2" style={{ color: 'var(--home-text-sub)', opacity: 0.5 }}>
                           {formatDate(tree.created_at)}

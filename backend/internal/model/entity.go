@@ -81,6 +81,9 @@ type Tree struct {
 	ID          uuid.UUID `json:"id" gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
 	RootTopic   string    `json:"root_topic" gorm:"not null"`
 	Description string    `json:"description"`
+	// 模式：understanding = 理解模式（知识体系划分），interview = 面试模式（面试问题域划分）
+	// 一棵树从创建起模式固定，节点划分、文章结构等一切生成行为由树的模式唯一决定
+	Mode        string    `json:"mode" gorm:"type:varchar(20);not null;default:'understanding'"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 	RootNode    *Node     `json:"root_node,omitempty" gorm:"-"`

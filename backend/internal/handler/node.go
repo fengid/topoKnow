@@ -1,20 +1,17 @@
 package handler
 
 import (
+	"strings"
 	"topoknow-backend/internal/model"
 	"topoknow-backend/internal/pkg/handler_helper"
 	"topoknow-backend/internal/pkg/logger"
 	"topoknow-backend/internal/pkg/response"
 	"topoknow-backend/internal/repository"
 	"topoknow-backend/internal/service"
-	"fmt"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
-
-const MaxChildNodes = 10
 
 type NodeHandler struct {
 	nodeRepo       *repository.NodeRepository
@@ -138,7 +135,7 @@ func (h *NodeHandler) Create(c *gin.Context) {
 		Difficulty:    difficulty,
 		Depth:         depth,
 		PositionOrder: maxOrder + 1,
-		IsExpanded:   &[]bool{true}[0],
+		IsExpanded:    &[]bool{true}[0],
 	}
 
 	if err := h.nodeRepo.Create(node); err != nil {
@@ -271,114 +268,94 @@ func (h *NodeHandler) Expand(c *gin.Context) {
 	}
 
 	var expandReq struct {
-		Topic            string   `json:"topic"`
-		Level            string   `json:"level"`
-		ExistingChildren []string `json:"existing_children"`
-		Model            string   `json:"model"`
+		Topic string `json:"topic"`
+		Level string `json:"level"`
+		Model string `json:"model"`
 	}
 	_ = c.ShouldBindJSON(&expandReq)
 	modelID := expandReq.Model
 
-	// 使用共享上下文构建器
+	// 使用共享上下文构建器（含树的模式、已有子节点）
 	parentNode, existingChildren, ctx, err := h.nodeContextSvc.BuildExpandContext(id)
 	if err != nil {
 		response.NotFound(c, "Node not found")
 		return
 	}
 
-	// 检查子节点数量是否已达上限
-	if len(existingChildren) >= MaxChildNodes {
-		response.SuccessWithError(c, fmt.Sprintf("已达到子节点数量上限（%d个），无法继续展开", MaxChildNodes))
-		return
-	}
-
-	if len(existingChildren) == 0 {
-		// 无子节点 → 批量生成
-		childInfos, err := h.aiService.GenerateChildNodes(*ctx, modelID)
-		if err != nil {
-			logger.L.Errorf("[Node] AI 批量生成子节点失败: %v", err)
-			response.InternalError(c, err.Error())
-			return
-		}
-
-		var createdNodes []model.Node
-		for i, info := range childInfos {
-			childNode := &model.Node{
-				TreeID:        parentNode.TreeID,
-				ParentID:      &parentNode.ID,
-				Topic:         info.Topic,
-				Description:   info.Description,
-				Importance:    info.Importance,
-				Difficulty:    info.Difficulty,
-				Depth:         parentNode.Depth + 1,
-				PositionOrder: i + 1,
-			}
-			if err := h.nodeRepo.Create(childNode); err != nil {
-				logger.L.Errorf("[Node] 创建子节点失败: %v", err)
-				continue
-			}
-			createdNodes = append(createdNodes, *childNode)
-		}
-
-		if len(createdNodes) == 0 {
-			response.InternalError(c, "AI 生成失败，请稍后重试")
-			return
-		}
-
-		logger.L.Infof("[Node] 批量创建子节点完成: parent=%s, count=%d", parentNode.Topic, len(createdNodes))
-		h.nodeRepo.UpdateExpanded(id, true)
-
-		// 填充计算字段
-		nodePtrs := make([]*model.Node, len(createdNodes))
-		for i := range createdNodes {
-			nodePtrs[i] = &createdNodes[i]
-		}
-		PopulateNodeMetadata(nodePtrs, h.nodeRepo)
-
-		response.Success(c, createdNodes)
-		return
-	}
-
-	// 有子节点 → 单个生成
-	childInfo, err := h.aiService.GenerateChildNodeInfo(*ctx, modelID)
+	// 统一批量生成：无子节点时首批生成，有子节点时追加（AI 参考已有子节点避免重复）
+	childInfos, err := h.aiService.GenerateChildNodes(*ctx, modelID)
 	if err != nil {
-		logger.L.Errorf("[Node] AI 生成子节点失败: %v", err)
-		response.Success(c, existingChildren)
+		logger.L.Errorf("[Node] AI 批量生成子节点失败: %v", err)
+		response.InternalError(c, err.Error())
 		return
 	}
 
-	// 检查 AI 返回的主题是否已存在（双重检查）
-	for _, existing := range ctx.ExistingSiblings {
-		if strings.EqualFold(existing.Topic, childInfo.Topic) {
-			logger.L.Infof("[Node] AI 返回的主题 '%s' 已存在，跳过创建", childInfo.Topic)
-			response.Success(c, existingChildren)
-			return
+	// 服务端兜底（提示词是软约束）：与已有子节点大小写不敏感去重 + 硬上限截断
+	const maxChildrenHardCap = 15
+	existingTopics := make(map[string]struct{}, len(existingChildren))
+	for _, ch := range existingChildren {
+		existingTopics[strings.ToLower(strings.TrimSpace(ch.Topic))] = struct{}{}
+	}
+	var deduped []model.ChildNodeInfo
+	for _, info := range childInfos {
+		key := strings.ToLower(strings.TrimSpace(info.Topic))
+		if key == "" {
+			continue
+		}
+		if _, dup := existingTopics[key]; dup {
+			logger.L.Infof("[Node] AI 返回的主题 '%s' 已存在，跳过", info.Topic)
+			continue
+		}
+		existingTopics[key] = struct{}{}
+		deduped = append(deduped, info)
+		if len(deduped) >= maxChildrenHardCap {
+			logger.L.Warnf("[Node] AI 返回子节点数超过硬上限 %d，截断", maxChildrenHardCap)
+			break
 		}
 	}
+	childInfos = deduped
 
-	// 创建新子节点
-	childNode := &model.Node{
-		TreeID:        parentNode.TreeID,
-		ParentID:      &parentNode.ID,
-		Topic:         childInfo.Topic,
-		Description:   childInfo.Description,
-		Importance:    childInfo.Importance,
-		Difficulty:    childInfo.Difficulty,
-		Depth:         parentNode.Depth + 1,
-		PositionOrder: len(existingChildren) + 1,
-	}
-
-	if err := h.nodeRepo.Create(childNode); err != nil {
-		logger.L.Errorf("[Node] 创建子节点失败: %v", err)
-		response.InternalError(c, "Failed to create child node")
+	if len(childInfos) == 0 {
+		response.SuccessWithError(c, "AI 未生成新的子节点，该层可能已覆盖完整")
 		return
 	}
 
-	logger.L.Infof("[Node] 成功创建子节点: topic=%s, parent=%s", childNode.Topic, parentNode.Topic)
+	var createdNodes []model.Node
+	positionOrder := len(existingChildren)
+	for _, info := range childInfos {
+		positionOrder++
+		childNode := &model.Node{
+			TreeID:        parentNode.TreeID,
+			ParentID:      &parentNode.ID,
+			Topic:         info.Topic,
+			Description:   info.Description,
+			Importance:    info.Importance,
+			Difficulty:    info.Difficulty,
+			Depth:         parentNode.Depth + 1,
+			PositionOrder: positionOrder,
+		}
+		if err := h.nodeRepo.Create(childNode); err != nil {
+			logger.L.Errorf("[Node] 创建子节点失败: %v", err)
+			continue
+		}
+		createdNodes = append(createdNodes, *childNode)
+	}
+
+	if len(createdNodes) == 0 {
+		response.SuccessWithError(c, "AI 未生成新的子节点，该层可能已覆盖完整")
+		return
+	}
+
+	logger.L.Infof("[Node] 批量创建子节点完成: parent=%s, mode=%s, existing=%d, created=%d",
+		parentNode.Topic, ctx.Mode, len(existingChildren), len(createdNodes))
 	h.nodeRepo.UpdateExpanded(id, true)
 
 	// 填充计算字段
-	PopulateNodeMetadata([]*model.Node{childNode}, h.nodeRepo)
+	nodePtrs := make([]*model.Node, len(createdNodes))
+	for i := range createdNodes {
+		nodePtrs[i] = &createdNodes[i]
+	}
+	PopulateNodeMetadata(nodePtrs, h.nodeRepo)
 
-	response.Success(c, []model.Node{*childNode})
+	response.Success(c, createdNodes)
 }

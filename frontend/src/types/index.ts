@@ -1,5 +1,5 @@
 // Tree types
-export type { Tree } from './tree'
+export type { Tree, TreeMode } from './tree'
 
 // Node types
 export type { Node, ExpandNodeRequest } from './node'

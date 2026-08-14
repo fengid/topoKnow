@@ -16,6 +16,7 @@ import (
 type QuestionHandler struct {
 	questionRepo   *repository.QuestionRepository
 	nodeRepo       *repository.NodeRepository
+	treeRepo       *repository.TreeRepository
 	aiService      *service.AIService
 	nodeContextSvc *service.NodeContextService
 }
@@ -23,12 +24,14 @@ type QuestionHandler struct {
 func NewQuestionHandler(
 	questionRepo *repository.QuestionRepository,
 	nodeRepo *repository.NodeRepository,
+	treeRepo *repository.TreeRepository,
 	aiService *service.AIService,
 	nodeContextSvc *service.NodeContextService,
 ) *QuestionHandler {
 	return &QuestionHandler{
 		questionRepo:   questionRepo,
 		nodeRepo:       nodeRepo,
+		treeRepo:       treeRepo,
 		aiService:      aiService,
 		nodeContextSvc: nodeContextSvc,
 	}
@@ -103,7 +106,14 @@ func (h *QuestionHandler) Create(c *gin.Context) {
 	logger.L.Infof("[Question] Generating question for node: %s (topic=%s), existing count: %d, ancestors count: %d, siblings count: %d",
 		nodeID, node.Topic, len(existingQuestions), len(ancestors), len(siblings))
 
-	result, err := h.aiService.GenerateSingleQuestion(node.Topic, node.Description, ancestors, siblings, existingQuestions, req.Model)
+	// 模式来自树（单一事实来源）：interview 树生成面试官追问式考题
+	tree, err := h.treeRepo.FindByID(node.TreeID.String())
+	if err != nil {
+		response.InternalError(c, "Failed to fetch tree")
+		return
+	}
+
+	result, err := h.aiService.GenerateSingleQuestion(node.Topic, node.Description, ancestors, siblings, existingQuestions, service.NormalizeTreeMode(tree.Mode), req.Model)
 	if err != nil {
 		logger.L.Errorf("[Question] AI generation failed: %v", err)
 		response.InternalError(c, err.Error())

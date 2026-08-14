@@ -215,9 +215,11 @@ export function NodeFullscreenModal({ nodeId, onClose }: NodeFullscreenModalProp
             </div>
           </div>
 
-          {/* ─── Content Area ─── */}
+          {/* ─── Content Area ───
+              宽度与 header 一致（同一容器契约 max-w-6xl + 相同 padding），
+              正文左右边界与返回/关闭按钮对齐 */}
           <div className="flex-1 overflow-y-auto">
-            <div className="max-w-3xl mx-auto px-6 lg:px-8 py-10">
+            <div className="max-w-6xl mx-auto px-6 lg:px-8 py-10">
               <AnimatePresence mode="wait">
                 {activeTab === 'info' && (
                   <motion.div key="info" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>

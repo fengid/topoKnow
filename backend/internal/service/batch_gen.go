@@ -454,7 +454,16 @@ func (s *BatchGenService) processGenerateArticle(item *QueueItem) {
 	ancestors, _ := s.nodeContextSvc.GetAncestors(item.NodeID)
 	siblings, _ := s.nodeContextSvc.GetSiblings(item.NodeID)
 
-	content, err := s.aiService.GenerateArticle(node.Topic, node.Description, ancestors, siblings, item.ModelID)
+	// 模式来自树（单一事实来源）；查询失败走重试，绝不静默降级——
+	// 否则 interview 树会用错模板生成并落库，错误被永久固化
+	tree, treeErr := s.treeRepo.FindByID(node.TreeID.String())
+	if treeErr != nil {
+		item.Error = fmt.Sprintf("查询树信息失败: %v", treeErr)
+		return
+	}
+	treeMode := NormalizeTreeMode(tree.Mode)
+
+	content, err := s.aiService.GenerateArticle(node.Topic, node.Description, ancestors, siblings, treeMode, item.ModelID)
 	if err != nil {
 		item.Error = fmt.Sprintf("AI 生成文章失败: %v", err)
 		return
@@ -463,7 +472,7 @@ func (s *BatchGenService) processGenerateArticle(item *QueueItem) {
 	article := &model.Article{
 		ID:        uuid.New(),
 		NodeID:    node.ID,
-		Title:     node.Topic + " 知识点详解",
+		Title:     node.Topic + ArticleTitleSuffix(treeMode),
 		Content:   content,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),

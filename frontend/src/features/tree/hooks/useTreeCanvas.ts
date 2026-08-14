@@ -18,7 +18,7 @@ import { useBatchGenSSE } from '@/features/tree/hooks/useBatchGenSSE'
 import type { Node as NodeType } from '@/types'
 import { getTreeLayout, getPartialTreeLayout } from '@/utils/treeLayout'
 import { getRowsLayout } from '@/utils/rowsLayout'
-import type { LayoutedElement } from '@/utils/layout'
+import { nodeWidth, nodeHeight, type LayoutedElement } from '@/utils/layout'
 
 export interface ConfirmDialogState {
   isOpen: boolean
@@ -66,7 +66,11 @@ export function useTreeCanvas(treeId?: string) {
 
   const prevNodeIdsRef = useRef<Set<string>>(new Set())
   const batchGenRootRef = useRef<string | null>(null)
+  // 单击延迟执行，避免与双击冲突
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // 拖动手势抑制：一次手势只允许一次状态变更（dragStart 已处理，其后同手势的 click 不再切换）。
+  // 用布尔 flag 绑定手势而非时间窗口：dragStop 即清除，不会误伤后续独立点击
+  const dragHandledRef = useRef(false)
   const parentMapRef = useRef<Map<string, string>>(new Map())
 
   const closeDialog = useCallback(() => {
@@ -140,8 +144,8 @@ export function useTreeCanvas(treeId?: string) {
   const expandMutation = useMutation({
     mutationFn: async (nodeId: string) => {
       const response = await nodeApi.expand(nodeId, {
-        topic: 'Go',
-        level: 'intermediate',
+        topic: '',
+        level: '',
         model: selectedModelId,
       })
       if (!response.data.success) {
@@ -346,25 +350,55 @@ export function useTreeCanvas(treeId?: string) {
     prevNodeIdsRef.current = currentIds
     setNodes(layouted.nodes)
     setEdges(layouted.edges)
+    // 焦点变化后的布局已提交，标记待跟随——由下方消费 effect 在新坐标上执行 setCenter
+    if (focusChangedRef.current) {
+      focusChangedRef.current = false
+      pendingFollowRef.current = focusNodeId
+    }
   }, [treeData, focusNodeId, displayMode, setNodes, setEdges])
 
-  // ---------- 焦点变化后自动适配视图 ----------
+  // ---------- 焦点变化后跟随视图（保持缩放） ----------
+  // 一致性：用户设置的缩放是最高优先级意图；展开/收起只平移到焦点节点，不重置缩放。
+  // 适配视图（fitView）仅发生在首次挂载。
+  // 实现：焦点变化只登记 pending（不设 timer，避免被重渲染 cleanup 清掉）；
+  // 布局 effect 提交新坐标后，本 effect 在下一次 nodes 变化时消费 pending 并 setCenter，
+  // 天然使用重布局后的新坐标。
+  const pendingFollowRef = useRef<string | null>(null)
+  const focusChangedRef = useRef(false)
   const prevFocusRef = useRef<string | null>(null)
   useEffect(() => {
-    if (focusNodeId && focusNodeId !== prevFocusRef.current && reactFlowInstance) {
-      const timer = setTimeout(() => {
-        reactFlowInstance.fitView({ padding: 0.2, duration: 500 })
-      }, 60)
+    if (focusNodeId !== prevFocusRef.current) {
+      focusChangedRef.current = true
       prevFocusRef.current = focusNodeId
-      return () => clearTimeout(timer)
     }
-    prevFocusRef.current = focusNodeId
-  }, [focusNodeId, reactFlowInstance])
+  }, [focusNodeId])
+
+  useEffect(() => {
+    const pending = pendingFollowRef.current
+    if (!pending || !reactFlowInstance) return
+    const focusNode = nodes.find((n) => n.id === pending)
+    if (!focusNode) return
+    pendingFollowRef.current = null
+    const timer = setTimeout(() => {
+      // 对准节点中心（布局坐标为左上角）
+      reactFlowInstance.setCenter(
+        focusNode.position.x + nodeWidth / 2,
+        focusNode.position.y + nodeHeight / 2,
+        {
+          zoom: reactFlowInstance.getZoom(), // 保持当前缩放
+          duration: 500,
+        }
+      )
+    }, 60)
+    return () => clearTimeout(timer)
+  }, [nodes, reactFlowInstance])
 
   // ---------- 交互 ----------
   // 单击：延迟执行避免与双击冲突；已是焦点则收起（焦点回到父节点），否则展开
   const onNodeClick = useCallback((_: unknown, node: Node) => {
     setContextMenuNodeId(null)
+    // 同一手势已由 dragStart 处理过（微移点击会先触发拖动），跳过防双次触发
+    if (dragHandledRef.current) return
     if (clickTimerRef.current) clearTimeout(clickTimerRef.current)
     clickTimerRef.current = setTimeout(() => {
       setFocusNodeId((prev) =>
@@ -380,6 +414,37 @@ export function useTreeCanvas(treeId?: string) {
       clickTimerRef.current = null
     }
     setSelectedNodeId(node.id)
+  }, [])
+
+  // 拖动开始：切换焦点（拖动节点 = 关注该节点，与单击语义一致；
+  // 焦点变化触发重布局，节点吸附回布局位置——布局由算法统一管理）
+  // 拖动开始：标记手势已处理 + 登记待切换焦点。
+  // 焦点切换延迟到 dragStop：手势中途重布局会让被拖节点瞬移、光标锚点断裂，
+  // 布局只在手势结束后更新（一次手势一次状态变更，且变更时机在手势边界）
+  const pendingDragFocusRef = useRef<string | null>(null)
+  const onNodeDragStart = useCallback((_: unknown, node: Node) => {
+    setContextMenuNodeId(null)
+    // 标记本次手势已处理，随后同手势的 click 事件不再切换
+    //（否则会判定为"再次点击"而收起到父节点）
+    dragHandledRef.current = true
+    if (clickTimerRef.current) {
+      clearTimeout(clickTimerRef.current)
+      clickTimerRef.current = null
+    }
+    pendingDragFocusRef.current = node.id
+  }, [])
+
+  // 拖动结束：消费登记的焦点切换；延迟到事件循环末尾解除抑制——
+  // dragStop 之后浏览器才会补发同手势的 click，必须让该 click 先经过抑制检查
+  const onNodeDragStop = useCallback(() => {
+    const pending = pendingDragFocusRef.current
+    pendingDragFocusRef.current = null
+    if (pending) {
+      setFocusNodeId((prev) => (prev === pending ? prev : pending))
+    }
+    setTimeout(() => {
+      dragHandledRef.current = false
+    }, 0)
   }, [])
 
   const onPaneClick = useCallback(() => {
@@ -404,8 +469,11 @@ export function useTreeCanvas(treeId?: string) {
     return () => window.removeEventListener('auxclick', onAuxClick)
   }, [])
 
-  // 历史栈守卫：后退键逐层退出上下文（详情 → 焦点 → 离开页面），而非直接回退 URL
+  // 历史栈守卫：后退键逐层退出上下文（详情 → 焦点 → 离开页面），而非直接回退 URL。
+  // 依赖 treeId：切换树（如模式切换跳转）时重建哨兵，保证守卫始终对应当前页面；
+  // 卸载时弹出哨兵，不留历史残留
   const selectedNodeIdRef = useRef<string | null>(null)
+  const guardTreeIdRef = useRef<string | null>(null)
   selectedNodeIdRef.current = selectedNodeId
   useEffect(() => {
     const guardState = { __treeGuard: true }
@@ -414,6 +482,13 @@ export function useTreeCanvas(treeId?: string) {
     const onPopState = (event: PopStateEvent) => {
       // 前进键回到守卫层：忽略（前进行为由 auxclick 处理）
       if ((event.state as { __treeGuard?: boolean } | null)?.__treeGuard) return
+
+      // 守卫条目对应的树已不是当前树（跨树导航后残留）：本次后退是真正的页面回退，
+      // 再弹一层到目标页，避免 URL 与内容不一致
+      if (guardTreeIdRef.current && guardTreeIdRef.current !== treeId) {
+        window.history.back()
+        return
+      }
 
       if (selectedNodeIdRef.current) {
         // 第一层：退出详情
@@ -429,9 +504,16 @@ export function useTreeCanvas(treeId?: string) {
       }
     }
 
+    guardTreeIdRef.current = treeId ?? null
     window.addEventListener('popstate', onPopState)
-    return () => window.removeEventListener('popstate', onPopState)
-  }, [])
+    return () => {
+      window.removeEventListener('popstate', onPopState)
+      // 卸载时回收哨兵：若当前仍在哨兵层则弹回，避免历史栈残留导致后退多按一次
+      if (window.history.state && (window.history.state as { __treeGuard?: boolean }).__treeGuard) {
+        window.history.back()
+      }
+    }
+  }, [treeId])
 
   // 卸载时清理定时器
   useEffect(() => {
@@ -474,6 +556,8 @@ export function useTreeCanvas(treeId?: string) {
     // 交互
     onNodeClick,
     onNodeDoubleClick,
+    onNodeDragStart,
+    onNodeDragStop,
     onPaneClick,
     // 确认弹窗
     confirmDialog,

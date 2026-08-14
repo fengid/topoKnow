@@ -1,14 +1,24 @@
 package handler
 
 import (
+	"errors"
+	"fmt"
 	"topoknow-backend/internal/model"
 	"topoknow-backend/internal/pkg/response"
 	"topoknow-backend/internal/repository"
 	"topoknow-backend/internal/service"
-	"fmt"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
+
+// modeTreeLabel 按模式返回树的中文标签
+func modeTreeLabel(mode string) string {
+	if service.NormalizeTreeMode(mode) == "interview" {
+		return "面试树"
+	}
+	return "学习树"
+}
 
 type TreeHandler struct {
 	treeRepo *repository.TreeRepository
@@ -41,19 +51,28 @@ func (h *TreeHandler) Create(c *gin.Context) {
 		return
 	}
 
-	// 检查数据库是否已存在相同主题的树
-	existingTree, err := h.treeRepo.FindByRootTopicWithRootNode(req.RootTopic)
+	// 规范化模式：understanding（默认）/ interview
+	mode := req.Mode
+	if mode != "interview" {
+		mode = "understanding"
+	}
+
+	// 检查同主题同模式是否已有树（同主题两种模式各存一棵）
+	existingTree, err := h.treeRepo.FindByTopicAndModeWithRootNode(req.RootTopic, mode)
 	if err == nil && existingTree != nil {
-		// 已存在相同主题的树，返回已存在的树
 		c.JSON(200, response.Response{
 			Success: true,
 			Data:    existingTree,
-			Message: fmt.Sprintf("已存在主题为「%s」的学习树，已为您返回该树", req.RootTopic),
+			Message: fmt.Sprintf("已存在主题为「%s」的%s，已为您返回", req.RootTopic, modeTreeLabel(mode)),
 		})
 		return
 	}
-	// 如果错误不是 "record not found"，说明是其他数据库错误
-	if err != nil && err.Error() != "record not found" {
+	// 树记录存在但根节点缺失：脏数据，明确报错而非伪装 not found 导致重复建树
+	if errors.Is(err, repository.ErrRootNodeMissing) {
+		response.InternalError(c, "树数据异常（根节点缺失），请检查数据")
+		return
+	}
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		response.InternalError(c, "Failed to check existing tree")
 		return
 	}
@@ -65,7 +84,7 @@ func (h *TreeHandler) Create(c *gin.Context) {
 
 	if h.aiSvc != nil {
 		// 如果传了 prompt_id，尝试使用对应的提示词模板
-		nodeInfo, err := h.aiSvc.GenerateRootNodeInfoWithPrompt(req.RootTopic, req.PromptID)
+		nodeInfo, err := h.aiSvc.GenerateRootNodeInfoWithPrompt(req.RootTopic, mode, req.PromptID)
 		if err != nil {
 			response.InternalError(c, err.Error())
 			return
@@ -82,6 +101,7 @@ func (h *TreeHandler) Create(c *gin.Context) {
 	tree := &model.Tree{
 		RootTopic:   req.RootTopic,
 		Description: description,
+		Mode:        mode,
 	}
 
 	if err := h.treeRepo.Create(tree); err != nil {

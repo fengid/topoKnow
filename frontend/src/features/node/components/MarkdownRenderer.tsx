@@ -4,6 +4,25 @@ import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/pris
 import remarkGfm from 'remark-gfm'
 import { useThemeStore } from '@/store'
 
+/**
+ * 面试模式追问链格式归一化：
+ * AI 生成的【追问】条目有时问答挤在同一行，有时分行（数据已证实两种并存）。
+ * 渲染前统一为：第一行【追问】+问题，第二行以 → 开头给答法。
+ * 与 generate_article_interview 模板 v2 的强制格式保持一致（展示侧兜底存量数据）。
+ * 代码块/行内代码区域跳过，避免插入换行破坏其结构。
+ */
+function normalizeFollowUpChain(content: string): string {
+  const parts = content.split(/(```[\s\S]*?```|`[^`\n]*`)/g)
+  return parts
+    .map((part, i) => {
+      if (i % 2 === 1) return part // 分隔符捕获组：代码块/行内代码，原样保留
+      return part.replace(/(【追问[^】]*】[^\n→]*?)(→|答：)/g, (_m, q: string, a: string) => {
+        return `${q.replace(/\s+$/, '')}\n→ ${a === '→' ? '' : a}`
+      })
+    })
+    .join('')
+}
+
 // Markdown Renderer with syntax highlighting
 export function MarkdownRenderer({ content }: { content: string }) {
   const { resolvedTheme } = useThemeStore()
@@ -170,7 +189,7 @@ export function MarkdownRenderer({ content }: { content: string }) {
         },
       }}
     >
-      {content}
+      {normalizeFollowUpChain(content)}
     </ReactMarkdown>
   )
 }

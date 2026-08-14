@@ -56,8 +56,8 @@ func New(cfg *config.Config) *Server {
 	nodeHandler := handler.NewNodeHandler(nodeRepo, treeRepo, aiService, nodeContextSvc)
 	aiHandler := handler.NewAIHandler(aiService, aiFactory)
 	promptHandler := handler.NewPromptHandler(promptSvc)
-	articleHandler := handler.NewArticleHandler(articleRepo, nodeRepo, aiService, nodeContextSvc)
-	questionHandler := handler.NewQuestionHandler(questionRepo, nodeRepo, aiService, nodeContextSvc)
+	articleHandler := handler.NewArticleHandler(articleRepo, nodeRepo, treeRepo, aiService, nodeContextSvc)
+	questionHandler := handler.NewQuestionHandler(questionRepo, nodeRepo, treeRepo, aiService, nodeContextSvc)
 	batchGenSvc := service.NewBatchGenService(aiService, nodeRepo, treeRepo, articleRepo, nodeContextSvc)
 	batchGenHandler := handler.NewBatchGenHandler(batchGenSvc)
 

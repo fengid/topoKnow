@@ -129,12 +129,19 @@ func (s *NodeContextService) BuildExpandContext(nodeID string) (*model.Node, []m
 		rootTopic = tree.RootTopic
 	}
 
+	// 模式来自树（单一事实来源），决定后续提示词与分层策略
+	treeMode := "understanding"
+	if tree != nil && tree.Mode != "" {
+		treeMode = tree.Mode
+	}
+
 	ctx := &model.ExpandContext{
 		RootTopic:        rootTopic,
 		ParentTopic:      parentNode.Topic,
 		ParentDesc:       parentNode.Description,
 		ParentImportance: parentNode.Importance,
 		ChildDepth:       parentNode.Depth + 1,
+		Mode:             treeMode,
 		Ancestors:        ancestors,
 		ExistingSiblings: existingSiblings,
 	}

@@ -18,39 +18,6 @@
     inset 0 1px 0 var(--glass-edge-highlight);
 }
 
-/* 顶层光泽效果 */
-.liquid-node::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -50%;
-  width: 200%;
-  height: 100%;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.06) 50%,
-    transparent 100%
-  );
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.liquid-node:hover::before {
-  opacity: 1;
-  animation: node-shine 2s ease-in-out infinite;
-}
-
-@keyframes node-shine {
-  0% {
-    transform: translateX(-100%) skewX(-15deg);
-  }
-  100% {
-    transform: translateX(100%) skewX(-15deg);
-  }
-}
-
 /* 悬停效果 */
 .liquid-node:hover {
   transform: translateY(-2px);
@@ -60,43 +27,35 @@
     0 0 20px rgba(201, 169, 110, 0.12);
 }
 
-/* 选中状态 - 金色发光 */
+/* 聚焦状态：绿色加厚边框 + 淡绿色阴影（选中与聚焦共用，语义一致）
+   绿色在本项目是「当前/活跃」状态色，与连接状态、完成徽章同色系
+   注意：聚焦是离散状态，进入/退出必须近似瞬时（80ms），
+   不继承基础类 250ms 的 all 过渡（那会产生失焦后绿色残留的中间态） */
 .liquid-node-selected {
-  border-color: rgba(201, 169, 110, 0.4) !important;
+  border: 2px solid var(--ios-accent-green) !important;
   box-shadow:
-    0 8px 32px rgba(201, 169, 110, 0.2),
-    0 0 0 3px rgba(201, 169, 110, 0.1),
+    0 8px 32px rgba(48, 209, 88, 0.18),
+    0 0 20px rgba(48, 209, 88, 0.12),
     inset 0 1px 0 var(--glass-edge-highlight) !important;
+  transition:
+    border-color 80ms ease,
+    box-shadow 80ms ease,
+    transform 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
-/* 重要性标记 - 高 */
+/* 重要性标记：边框全边着色，红/橙/灰直觉强度序，无需图例解释
+   （红橙沿用 accent 变量，灰用文本三级色，不引入新颜色） */
 .liquid-node-high {
-  border-left: 3px solid var(--ios-accent-red);
-  background: linear-gradient(
-    135deg,
-    rgba(255, 69, 58, 0.08) 0%,
-    var(--glass-bg) 50%
-  );
+  border: 1.5px solid var(--ios-accent-red);
 }
 
-/* 重要性标记 - 中 */
 .liquid-node-medium {
-  border-left: 3px solid var(--ios-accent-orange);
-  background: linear-gradient(
-    135deg,
-    rgba(255, 159, 10, 0.06) 0%,
-    var(--glass-bg) 50%
-  );
+  border: 1.5px solid var(--ios-accent-orange);
 }
 
-/* 重要性标记 - 低 */
 .liquid-node-low {
-  border-left: 3px solid var(--ios-accent-green);
-  background: linear-gradient(
-    135deg,
-    rgba(48, 209, 88, 0.05) 0%,
-    var(--glass-bg) 50%
-  );
+  border: 1.5px solid var(--home-text-sub);
+  border-color: color-mix(in srgb, var(--home-text-sub) 45%, transparent);
 }
 
 /* 节点标题 */

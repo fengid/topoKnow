@@ -138,15 +138,16 @@ func (s *AIService) ExplainNode(topic string, modelID ...string) (string, error)
 }
 
 // GenerateArticle 生成知识点文章（针对当前节点，包含祖先路径和兄弟节点上下文）
-func (s *AIService) GenerateArticle(topic string, description string, ancestors []model.AncestorInfo, siblings []model.SiblingInfo, modelID ...string) (string, error) {
+func (s *AIService) GenerateArticle(topic string, description string, ancestors []model.AncestorInfo, siblings []model.SiblingInfo, mode string, modelID ...string) (string, error) {
 	// 构建祖先路径与兄弟节点上下文（与练习题生成保持一致的展示格式）
 	ancestorsStr := buildAncestorContext(ancestors)
 	siblingsStr := buildSiblingContext(siblings)
 
-	// 获取提示词模板
-	template := s.getPromptOrDefault("generate_article", "")
+	// 获取提示词模板（按树的模式分派）
+	templateName := articleTemplateName(mode)
+	template := s.getPromptOrDefault(templateName, "")
 	if template == "" {
-		return "", fmt.Errorf("提示词模板 generate_article 未找到，请检查数据库初始化")
+		return "", fmt.Errorf("提示词模板 %s 未找到，请检查数据库初始化", templateName)
 	}
 	prompt := s.renderPrompt(template, map[string]string{
 		"topic":       topic,
@@ -184,8 +185,9 @@ func (s *AIService) GenerateArticle(topic string, description string, ancestors 
 	return result.Content, nil
 }
 
-// GenerateSingleQuestion 生成单个练习题（避免重复，包含祖先路径与兄弟节点上下文）
-func (s *AIService) GenerateSingleQuestion(topic string, description string, ancestors []model.AncestorInfo, siblings []model.SiblingInfo, existingQuestions []string, modelID ...string) (*model.SingleQuestionResponse, error) {
+// GenerateSingleQuestion 生成单个练习题（避免重复，包含祖先路径与兄弟节点上下文）。
+// 模式来自树（单一事实来源）：interview 树生成面试官追问式考题，understanding 树生成学习练习题
+func (s *AIService) GenerateSingleQuestion(topic string, description string, ancestors []model.AncestorInfo, siblings []model.SiblingInfo, existingQuestions []string, mode string, modelID ...string) (*model.SingleQuestionResponse, error) {
 	// 构建已有问题列表
 	existingStr := ""
 	if len(existingQuestions) > 0 {
@@ -196,10 +198,11 @@ func (s *AIService) GenerateSingleQuestion(topic string, description string, anc
 	ancestorsStr := buildAncestorContext(ancestors)
 	siblingsStr := buildSiblingContext(siblings)
 
-	// 获取提示词模板
-	template := s.getPromptOrDefault("generate_single_question", "")
+	// 获取提示词模板（按树的模式分派）
+	templateName := singleQuestionTemplateName(mode)
+	template := s.getPromptOrDefault(templateName, "")
 	if template == "" {
-		return nil, fmt.Errorf("提示词模板 generate_single_question 未找到，请检查数据库初始化")
+		return nil, fmt.Errorf("提示词模板 %s 未找到，请检查数据库初始化", templateName)
 	}
 	prompt := s.renderPrompt(template, map[string]string{
 		"topic":       topic,
@@ -241,91 +244,25 @@ func (s *AIService) GenerateSingleQuestion(topic string, description string, anc
 	return &result, nil
 }
 
-// GenerateChildNodeInfo 生成子节点信息（深度感知、学习导向）
-func (s *AIService) GenerateChildNodeInfo(ctx model.ExpandContext, modelID ...string) (*model.ChildNodeInfo, error) {
-	logger.L.Infof("[AI] 生成子节点信息: rootTopic=%s, parent=%s, childDepth=%d, siblingsCount=%d",
-		ctx.RootTopic, ctx.ParentTopic, ctx.ChildDepth, len(ctx.ExistingSiblings))
+// GenerateChildNodes 批量生成/追加子节点：
+// - 已有子节点时作为「追加」上下文传入，AI 避免重复，数量由 AI 决定
+// - 模式来自树（understanding/interview），决定提示词模板与分层策略
+func (s *AIService) GenerateChildNodes(ctx model.ExpandContext, modelID ...string) ([]model.ChildNodeInfo, error) {
+	logger.L.Infof("[AI] 批量生成子节点: rootTopic=%s, parent=%s, childDepth=%d, mode=%s, existing=%d",
+		ctx.RootTopic, ctx.ParentTopic, ctx.ChildDepth, ctx.Mode, len(ctx.ExistingSiblings))
 
-	// 构建树形路径
 	pathStr := s.buildTreePath(ctx)
+	templateName := childNodesTemplateName(ctx.Mode)
 
-	// 构建已有子节点列表（含描述）
-	existingStr := ""
-	if len(ctx.ExistingSiblings) > 0 {
-		var b strings.Builder
-		b.WriteString("\n\n已有子节点（不要生成重复或高度相似的主题）：\n")
-		for i, sib := range ctx.ExistingSiblings {
-			b.WriteString(fmt.Sprintf("%d. %s", i+1, sib.Topic))
-			if sib.Description != "" {
-				b.WriteString(" — ")
-				b.WriteString(sib.Description)
-			}
-			b.WriteString(fmt.Sprintf(" [%s]\n", sib.Importance))
-		}
-		existingStr = b.String()
-	}
-
-	// 深度策略
-	depthStrategy := getDepthStrategy(ctx.ChildDepth)
-
-	// 获取提示词模板
-	template := s.getPromptOrDefault("child_node_info", "")
+	template := s.getPromptOrDefault(templateName, "")
 	if template == "" {
-		return nil, fmt.Errorf("提示词模板 child_node_info 未找到，请检查数据库初始化")
+		return nil, fmt.Errorf("提示词模板 %s 未找到，请检查数据库初始化", templateName)
 	}
 	prompt := s.renderPrompt(template, map[string]string{
 		"rootTopic":        ctx.RootTopic,
 		"path":             pathStr,
-		"existingChildren": existingStr,
-		"depthStrategy":    depthStrategy,
-	})
-
-
-	logger.L.Infof("[AI] 正在调用 AI 生成子节点信息...")
-	response, err := s.callAI(prompt, modelID...)
-	if err != nil {
-		logger.L.Errorf("[AI] AI 调用失败: %v", err)
-		return nil, err
-	}
-	logger.L.Infof("[AI] AI 响应: %s", response)
-
-	// 解析 AI 返回的 JSON（兼容单个 JSON、JSON 数组、JSONL）
-	results, err := parseChildNodeInfoList(response)
-	if err != nil {
-		return nil, fmt.Errorf("AI 返回数据格式异常，请重试")
-	}
-
-	if len(results) == 0 {
-		return nil, fmt.Errorf("AI 返回内容为空，请重试")
-	}
-	result := results[0]
-	validateChildNodeInfo(&result)
-	if result.Topic == "" {
-		return nil, fmt.Errorf("AI 返回内容为空，请重试")
-	}
-
-	return &result, nil
-}
-
-// GenerateChildNodes 批量生成子节点信息（无子节点时使用，AI 自行决定数量）
-func (s *AIService) GenerateChildNodes(ctx model.ExpandContext, modelID ...string) ([]model.ChildNodeInfo, error) {
-	logger.L.Infof("[AI] 批量生成子节点: rootTopic=%s, parent=%s, childDepth=%d",
-		ctx.RootTopic, ctx.ParentTopic, ctx.ChildDepth)
-
-	// 复用路径构建逻辑
-	pathStr := s.buildTreePath(ctx)
-
-	// 深度策略
-	depthStrategy := getDepthStrategy(ctx.ChildDepth)
-
-	template := s.getPromptOrDefault("child_nodes_batch", "")
-	if template == "" {
-		return nil, fmt.Errorf("提示词模板 child_nodes_batch 未找到，请检查数据库初始化")
-	}
-	prompt := s.renderPrompt(template, map[string]string{
-		"rootTopic":     ctx.RootTopic,
-		"path":          pathStr,
-		"depthStrategy": depthStrategy,
+		"depthStrategy":    getDepthStrategyByMode(ctx.Mode, ctx.ChildDepth),
+		"existingChildren": buildExistingChildrenStr(ctx),
 	})
 
 
@@ -351,9 +288,11 @@ func (s *AIService) GenerateChildNodes(ctx model.ExpandContext, modelID ...strin
 		}
 	}
 
-	if len(validated) == 0 {
-		return nil, fmt.Errorf("AI 返回内容为空，请重试")
+	if len(validated) == 0 && len(results) > 0 {
+		// AI 返回了条目但全部校验失败（空 topic 等）
+		return nil, fmt.Errorf("AI 返回内容无效，请重试")
 	}
+	// len(validated) == 0 且 len(results) == 0：AI 依约返回空数组，层已覆盖完整，非错误
 
 	logger.L.Infof("[AI] 批量生成完成，共 %d 个子节点", len(validated))
 	return validated, nil
@@ -382,6 +321,109 @@ func (s *AIService) buildTreePath(ctx model.ExpandContext) string {
 		pathBuilder.WriteString(ctx.ParentDesc)
 	}
 	return pathBuilder.String()
+}
+
+// ---------- 模式分派（一致性原理：模式是树的属性，单一事实来源） ----------
+
+// NormalizeTreeMode 规范化树的模式（空串/非法值统一回落 understanding）
+func NormalizeTreeMode(mode string) string {
+	if mode == "interview" {
+		return "interview"
+	}
+	return "understanding"
+}
+
+// ArticleTitleSuffix 文章标题后缀，按树的模式分派（手动与批量路径共用，避免分叉）
+func ArticleTitleSuffix(mode string) string {
+	if NormalizeTreeMode(mode) == "interview" {
+		return " 面试速记"
+	}
+	return " 知识点详解"
+}
+
+// childNodesTemplateName 子节点批量生成提示词，按树的模式分派
+func childNodesTemplateName(mode string) string {
+	if mode == "interview" {
+		return "child_nodes_batch_interview"
+	}
+	return "child_nodes_batch"
+}
+
+// singleQuestionTemplateName 单题生成提示词，按树的模式分派
+func singleQuestionTemplateName(mode string) string {
+	if mode == "interview" {
+		return "generate_single_question_interview"
+	}
+	return "generate_single_question"
+}
+
+// articleTemplateName 文章生成提示词，按树的模式分派
+func articleTemplateName(mode string) string {
+	if mode == "interview" {
+		return "generate_article_interview"
+	}
+	return "generate_article"
+}
+
+// buildExistingChildrenStr 构建已有子节点上下文（追加生成时避免重复）
+func buildExistingChildrenStr(ctx model.ExpandContext) string {
+	if len(ctx.ExistingSiblings) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\n\n## 已有子节点（本次生成用于追加，不要与以下主题重复或高度相似；若该层已覆盖完整可返回少量新方向或空数组）：\n")
+	for i, sib := range ctx.ExistingSiblings {
+		b.WriteString(fmt.Sprintf("%d. %s", i+1, sib.Topic))
+		if sib.Description != "" {
+			b.WriteString(" — ")
+			b.WriteString(sib.Description)
+		}
+		b.WriteString(fmt.Sprintf(" [%s]\n", sib.Importance))
+	}
+	return b.String()
+}
+
+// getDepthStrategyByMode 按模式分派深度策略
+func getDepthStrategyByMode(mode string, childDepth int) string {
+	if mode == "interview" {
+		return getInterviewDepthStrategy(childDepth)
+	}
+	return getDepthStrategy(childDepth)
+}
+
+// getInterviewDepthStrategy 面试模式分层策略：按面试官实际提问方式划分
+func getInterviewDepthStrategy(childDepth int) string {
+	switch {
+	case childDepth == 1:
+		return `当前是第1层（面试提问主题划分）。
+生成规则：
+- 每个子节点 = 面试官的一个独立提问主题（如：为什么快、缓存三大问题、分布式锁、集群方案对比）
+- 划分依据是真实面试中出现频率和追问深度，不是教材目录
+- 一个主题应当能引出 30 秒以上的标准回答
+- 覆盖该技术面试中最高频的提问方向，遵循 MECE 原则`
+
+	case childDepth == 2:
+		return `当前是第2层（追问点划分）。
+生成规则：
+- 每个子节点 = 面试官顺着该提问主题会往下追问的具体问题点
+- 例如"缓存三大问题"下可以是：穿透/击穿/雪崩的区别、各自解决方案、布隆过滤器原理
+- 划分标准：每个子节点应对应面试中一个可独立考察的追问
+- 优先覆盖最常被追问的链路`
+
+	case childDepth == 3:
+		return `当前是第3层（追问链尽头的技术细节）。
+生成规则：
+- 生成该追问点下需要背下来的底层原理、关键参数、源码级细节
+- 例如"布隆过滤器"下可以是：误判率计算、hash函数次数选择、不支持删除的原因
+- 每个节点应当是可以用 1-2 句话+关键数字背下来的细节`
+
+	default:
+		return fmt.Sprintf(`当前是第%d层（深度细节）。
+生成规则：
+- 生成更深的底层机制、极端场景、参数调优等硬核细节
+- 面试到这个深度通常是大厂高级岗位，内容要经得起连环追问
+- 如果父节点已足够深入，宁缺毋滥，返回少量高价值细节或空数组`, childDepth)
+	}
 }
 
 // getDepthStrategy 根据子节点深度返回对应的生成策略
@@ -421,8 +463,10 @@ func getDepthStrategy(childDepth int) string {
 	}
 }
 
-func (s *AIService) GenerateRootNodeInfo(topic string, modelID ...string) (*model.RootNodeInfo, error) {
-	logger.L.Infof("[AI] 生成根节点信息: topic=%s", topic)
+// GenerateRootNodeInfo 生成根节点信息。mode 来自创建请求（树的属性，单一事实来源），
+// 注入模板 {{mode}} 变量让 AI 按模式生成语义匹配的描述与重要性
+func (s *AIService) GenerateRootNodeInfo(topic string, mode string, modelID ...string) (*model.RootNodeInfo, error) {
+	logger.L.Infof("[AI] 生成根节点信息: topic=%s, mode=%s", topic, mode)
 
 	template := s.getPromptOrDefault("root_node_info", "")
 	if template == "" {
@@ -430,6 +474,7 @@ func (s *AIService) GenerateRootNodeInfo(topic string, modelID ...string) (*mode
 	}
 	prompt := s.renderPrompt(template, map[string]string{
 		"topic": topic,
+		"mode":  mode,
 	})
 
 	logger.L.Infof("[AI] 正在调用 AI 生成根节点信息...")
@@ -462,13 +507,13 @@ func (s *AIService) GenerateRootNodeInfo(topic string, modelID ...string) (*mode
 }
 
 // GenerateRootNodeInfoWithPrompt 使用指定提示词生成根节点信息
-func (s *AIService) GenerateRootNodeInfoWithPrompt(topic string, promptID string, modelID ...string) (*model.RootNodeInfo, error) {
+func (s *AIService) GenerateRootNodeInfoWithPrompt(topic string, mode string, promptID string, modelID ...string) (*model.RootNodeInfo, error) {
 	logger.L.Infof("[AI] 使用提示词生成根节点信息: topic=%s, promptID=%s", topic, promptID)
 
 	// 如果没有指定 prompt_id，使用默认方法
 	if promptID == "" {
 		logger.L.Infof("[AI] 未指定 prompt_id，使用默认提示词 root_node_info")
-		return s.GenerateRootNodeInfo(topic, modelID...)
+		return s.GenerateRootNodeInfo(topic, mode, modelID...)
 	}
 
 	// 解析 prompt_id 为 UUID
@@ -495,6 +540,7 @@ func (s *AIService) GenerateRootNodeInfoWithPrompt(topic string, promptID string
 	template := prompt.Template
 	values := map[string]string{
 		"topic": topic,
+		"mode":  NormalizeTreeMode(mode),
 	}
 
 	renderedPrompt := s.renderPrompt(template, values)
@@ -599,9 +645,9 @@ func buildSiblingContext(siblings []model.SiblingInfo) string {
 func parseChildNodeInfoList(raw string) ([]model.ChildNodeInfo, error) {
 	cleaned := cleanAIResponse(raw)
 
-	// 尝试 JSON 数组
+	// 尝试 JSON 数组（空数组 [] 是设计内信号——该层已覆盖完整，原样返回不视为错误）
 	var arr []model.ChildNodeInfo
-	if err := json.Unmarshal([]byte(cleaned), &arr); err == nil && len(arr) > 0 {
+	if err := json.Unmarshal([]byte(cleaned), &arr); err == nil {
 		return arr, nil
 	}
 

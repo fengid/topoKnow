@@ -1,5 +1,6 @@
-import { useParams } from 'react-router-dom'
-import ReactFlow, { Controls, Background, MarkerType, NodeTypes } from 'reactflow'
+import { useState } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import ReactFlow, { Background, MarkerType, NodeTypes } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { motion } from 'framer-motion'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -9,9 +10,12 @@ import Navbar from '@/components/Navbar'
 import { CustomNode } from '@/features/tree/components'
 import { BatchGenPanel, BatchGenStartDialog } from '@/features/tree/components/BatchGenPanel'
 import { DisplayModeToggle } from '@/features/tree/components/DisplayModeToggle'
-import { ImportanceLegend } from '@/features/tree/components/ImportanceLegend'
 import { NoiseOverlay } from '@/components/shared'
 import { useTreeCanvas } from '@/features/tree/hooks/useTreeCanvas'
+import { ZoomIndicator } from '@/features/tree/components'
+import { treeApi } from '@/services/api'
+import { TREE_MODES, TreeModeToggle } from '@/features/tree/components'
+import type { TreeMode } from '@/types'
 
 const nodeTypes: NodeTypes = {
   custom: CustomNode,
@@ -19,6 +23,7 @@ const nodeTypes: NodeTypes = {
 
 export default function TreePage() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const selectedModelId = useModelStore((s) => s.selectedModelId)
 
   const {
@@ -38,11 +43,61 @@ export default function TreePage() {
     setSelectedNodeId,
     onNodeClick,
     onNodeDoubleClick,
+    onNodeDragStart,
+    onNodeDragStop,
     onPaneClick,
     confirmDialog,
     closeDialog,
     batchGen,
   } = useTreeCanvas(id)
+
+  // 树的模式切换：切换 = 跳转到同主题另一模式的树；不存在时确认创建（模式是树的属性，不在树内切换）
+  const [modeSwitchPending, setModeSwitchPending] = useState<TreeMode | null>(null)
+  const [isCreatingTree, setIsCreatingTree] = useState(false)
+  const [modeSwitchError, setModeSwitchError] = useState<string | null>(null)
+  const currentMode: TreeMode = treeData?.mode === 'interview' ? 'interview' : 'understanding'
+
+  const handleModeSwitch = async (target: TreeMode) => {
+    if (target === currentMode || !treeData?.root_topic) return
+    setModeSwitchError(null)
+    // 查找同主题目标模式的树；查询失败报错而非诱导创建（避免在已有树时重复建树）
+    try {
+      const { data } = await treeApi.getAll()
+      const trees = data.data ?? []
+      const existing = trees.find(
+        (t) =>
+          t.root_topic.trim().toLowerCase() === treeData.root_topic!.trim().toLowerCase() &&
+          (t.mode ?? 'understanding') === target
+      )
+      if (existing) {
+        navigate(`/tree/${existing.id}`)
+      } else {
+        setModeSwitchPending(target)
+      }
+    } catch (err) {
+      setModeSwitchError(err instanceof Error ? err.message : '查询树列表失败，请重试')
+    }
+  }
+
+  const handleCreateAndSwitch = async () => {
+    if (!modeSwitchPending || !treeData?.root_topic || isCreatingTree) return
+    setIsCreatingTree(true)
+    setModeSwitchError(null)
+    try {
+      const { data } = await treeApi.create(treeData.root_topic, modeSwitchPending)
+      if (data.success && data.data) {
+        setModeSwitchPending(null)
+        navigate(`/tree/${data.data.id}`)
+      } else {
+        // 业务失败（如 AI 未配置）：留在弹窗内展示错误，不静默
+        setModeSwitchError(data.error || data.message || '创建失败，请稍后重试')
+      }
+    } catch (err) {
+      setModeSwitchError(err instanceof Error ? err.message : '创建失败，请稍后重试')
+    } finally {
+      setIsCreatingTree(false)
+    }
+  }
 
   if (isLoading) {
     return (
@@ -92,13 +147,18 @@ export default function TreePage() {
       <div className="flex-1 relative z-10">
         <DisplayModeToggle mode={displayMode} onChange={setDisplayMode} />
 
+        {/* 树的模式切换（理解/面试）：当前树模式的属性展示 + 切换同主题另一模式的树 */}
+        <div className="absolute top-16 left-4 z-[1000]">
+          <TreeModeToggle mode={currentMode} onChange={handleModeSwitch} disabled={isCreatingTree} />
+        </div>
+
         <BatchGenPanel
           task={batchGen.task}
           items={batchGen.items}
           isConnected={batchGen.isConnected}
           isPanelOpen={batchGen.isPanelOpen}
           error={batchGen.error}
-          onClose={() => batchGen.setPanelOpen(false)}
+          onToggle={() => batchGen.setPanelOpen(!batchGen.isPanelOpen)}
           onCancel={batchGen.cancel}
           onRetry={batchGen.retry}
         />
@@ -107,14 +167,18 @@ export default function TreePage() {
           nodes={nodes}
           edges={edges}
           onNodesChange={onNodesChange}
+          elementsSelectable={false}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onInit={setReactFlowInstance}
           nodeTypes={nodeTypes}
           onNodeClick={onNodeClick}
           onNodeDoubleClick={onNodeDoubleClick}
+          onNodeDragStart={onNodeDragStart}
+          onNodeDragStop={onNodeDragStop}
           onPaneClick={onPaneClick}
           fitView
+          fitViewOptions={{ maxZoom: 1 }}
           attributionPosition="bottom-left"
           defaultEdgeOptions={{
             type: 'smoothstep',
@@ -125,11 +189,9 @@ export default function TreePage() {
           }}
         >
           <Background color={canvasDot} gap={24} size={1} />
-          <Controls />
+          <ZoomIndicator />
         </ReactFlow>
       </div>
-
-      <ImportanceLegend />
 
       {/* Confirm Dialog */}
       <ConfirmDialog
@@ -139,6 +201,29 @@ export default function TreePage() {
         variant={confirmDialog.variant}
         onConfirm={confirmDialog.onConfirm}
         onCancel={() => closeDialog()}
+      />
+
+      {/* 模式切换确认：目标模式的树不存在，确认后创建；创建期间防重复提交；失败展示错误 */}
+      <ConfirmDialog
+        isOpen={modeSwitchPending != null}
+        title="创建新模式的学习树"
+        message={`${
+          modeSwitchError
+            ? `${modeSwitchError}`
+            : `「${treeData?.root_topic ?? ''}」还没有${
+                TREE_MODES.find((m) => m.value === modeSwitchPending)?.label ?? ''
+              }的树，是否以当前主题创建？（当前处于${
+                TREE_MODES.find((m) => m.value === currentMode)?.label
+              }）`
+        }`}
+        variant="info"
+        onConfirm={handleCreateAndSwitch}
+        onCancel={() => {
+          if (!isCreatingTree) {
+            setModeSwitchPending(null)
+            setModeSwitchError(null)
+          }
+        }}
       />
 
       {/* Node Fullscreen Modal */}

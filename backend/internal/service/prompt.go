@@ -255,10 +255,12 @@ func (s *PromptService) InitDefaultPrompts() error {
 		{
 			Name:     "root_node_info",
 			Category: "tree",
-			Version:  4,
+			Version:  5,
 			Template: `你是一位资深的教育专家和学习规划师。请为以下学习主题生成知识拓扑的根节点信息。
 
 学习主题：{{topic}}
+
+构建模式：{{mode}}（understanding=理解模式，按知识体系划分，描述学习要点；interview=面试模式，按面试问题域划分，描述该技术在真实面试中的考察频率与核心考点）
 
 要求：
 1. 只返回纯 JSON 对象，不要任何其他文字
@@ -367,12 +369,33 @@ JSON 格式：
 开始生成，只返回 JSON：`,
 		},
 		{
-			Name:     "child_node_info",
+			Name:     "generate_single_question_interview",
+			Category: "question",
+			Version:  1,
+			Template: `你是一位资深技术面试官。请为面试考点拓扑中的当前节点生成一道面试官追问式考题。
+
+{{ancestors}}{{siblings}}当前节点信息：
+- 考点：{{topic}}
+- 描述：{{description}}{{existing}}
+
+要求：
+1. 只返回纯 JSON 对象，不要任何其他文字
+2. **JSON 格式必须正确**：answer 字段中的双引号必须转义为 \"、换行符必须转义为 \n、反斜杠必须转义为 \\
+3. 不要使用 markdown 代码块标记
+4. 不要生成与已有问题重复或相似的问题
+5. 问题用面试官原话视角提问（如"为什么…""如果…会怎样""…怎么选"），对应真实面试追问
+6. 答案给出可直接背诵的 30 秒标准回答
+
+JSON 格式：
+{"question":"面试官追问式问题","answer":"标准回答（Markdown 格式，先一句话结论再展开）","tags":["标签1","标签2"]}`,
+		},
+		{
+			Name:     "child_nodes_batch",
 			Category: "tree",
-			Version:  4,
+			Version:  5,
 			Template: `你是一位资深教育专家和知识体系架构师。你正在为「{{rootTopic}}」这个主题构建知识拓扑。
 
-请为当前节点生成【严格一个】新的子节点。注意：只生成一个，不要生成多个。
+请为当前节点生成子节点：若已有子节点则追加新方向，若为空则首次生成。
 
 ## 学习主题
 {{rootTopic}}
@@ -384,41 +407,8 @@ JSON 格式：
 {{depthStrategy}}
 
 ## 生成约束
-1. 严格只返回一个纯 JSON 对象，不要返回多个，不要返回数组，不要任何其他文字或 markdown 标记
-2. 主题名称简洁（2-6个字），是该领域的标准术语
-3. 描述要说明：这个知识点学习的核心要点与重要性（50-100字）
-4. 重要性基于学习重要性：high=核心必学, medium=重要推荐, low=拓展了解
-5. 难度基于理解深度：1=了解即可, 3=需要深入理解, 5=需要实战经验
-
-## 禁止生成
-- 与已有子节点重复或高度重叠的主题
-- 过于宽泛、无信息量的主题（如单独使用“其他”“综合”“进阶”等笼统词，而不是具体的知识领域）
-- 与「{{rootTopic}}」无关的边缘话题
-- 过于理论化缺乏实践意义的主题
-
-JSON 格式（importance 取 high/medium/low，difficulty 取 1-5 的整数）：
-{"topic":"子主题名称","description":"知识相关描述","importance":"high","difficulty":3}`,
-		},
-		{
-			Name:     "child_nodes_batch",
-			Category: "tree",
-			Version:  4,
-			Template: `你是一位资深教育专家和知识体系架构师。你正在为「{{rootTopic}}」这个主题构建知识拓扑。
-
-请为当前节点生成合适数量的子节点，覆盖该主题下最重要的知识方向。
-
-## 学习主题
-{{rootTopic}}
-
-## 知识树路径（从根到当前节点）
-{{path}}
-
-## 深度策略
-{{depthStrategy}}
-
-## 生成约束
-1. 返回一个 JSON 数组，每个元素是一个子节点对象
-2. 只生成该主题中最核心、最重要的方向，宁精勿多（通常3-7个，最多不超过10个）
+1. 返回一个 JSON 数组，每个元素是一个子节点对象；若已有子节点且该层已覆盖完整，可返回空数组 []
+2. 生成数量由你根据主题的内在结构自行决定，宁精勿多，每个子节点都是独立且重要的方向
 3. 主题名称简洁（2-6个字），是该领域的标准术语
 4. 描述要说明：这个知识点学习的核心要点与重要性（50-100字）
 5. 重要性基于学习重要性：high=核心必学, medium=重要推荐, low=拓展了解
@@ -426,6 +416,7 @@ JSON 格式（importance 取 high/medium/low，difficulty 取 1-5 的整数）�
 7. 只返回纯 JSON 数组，不要任何其他文字或 markdown 标记
 
 ## 禁止生成
+- 与已有子节点重复或高度重叠的主题
 - 过于宽泛、无信息量的主题（如单独使用“其他”“综合”“进阶”等笼统词，而不是具体的知识领域）
 - 与「{{rootTopic}}」无关的边缘话题
 - 过于理论化缺乏实践意义的主题
@@ -433,6 +424,69 @@ JSON 格式（importance 取 high/medium/low，difficulty 取 1-5 的整数）�
 
 JSON 格式（importance 取 high/medium/low，difficulty 取 1-5 的整数）：
 [{"topic":"子主题名称","description":"知识相关描述","importance":"high","difficulty":3}]`,
+		},
+		{
+			Name:     "child_nodes_batch_interview",
+			Category: "tree",
+			Version:  1,
+			Template: `你是一位资深技术面试官和面试备考专家。你正在为「{{rootTopic}}」这个主题构建面试考点拓扑（而非教材式知识体系）。
+
+请为当前节点生成子节点：若已有子节点则追加新考点，若为空则首次生成。每个子节点对应面试中的一个独立提问主题或追问点。
+
+## 学习主题
+{{rootTopic}}
+
+## 考点树路径（从根到当前节点）
+{{path}}{{existingChildren}}
+
+## 分层策略
+{{depthStrategy}}
+
+## 生成约束
+1. 返回一个 JSON 数组；若已有子节点且该层考点已覆盖完整，可返回空数组 []
+2. 生成数量由你根据该主题真实面试的高频程度自行决定，宁精勿多
+3. 主题名称用面试官的提问视角命名（如“为什么快”“三问题区别”“方案怎么选”），而非教材章节名（2-10个字）
+4. 描述说明：面试官考察什么、标准回答要点、高频程度（50-100字）
+5. 重要性基于面试频率：high=必问, medium=常问, low=偶问
+6. 难度基于回答难度：1=背概念即可, 3=需理解原理, 5=需实战踩坑经验
+7. 只返回纯 JSON 数组，不要任何其他文字或 markdown 标记
+
+## 禁止生成
+- 与已有子节点重复或高度相似的考点
+- 教材目录式划分（如“基础概念”“实践应用”这种领域划分，而非具体提问）
+- 与「{{rootTopic}}」无关的边缘话题
+- 无法引出实质回答的空泛话题
+
+JSON 格式（importance 取 high/medium/low，difficulty 取 1-5 的整数）：
+[{"topic":"考点名称","description":"面试官考察什么与回答要点","importance":"high","difficulty":3}]`,
+		},
+		{
+			Name:     "generate_article_interview",
+			Category: "article",
+			Version:  2,
+			Template: `你是一位资深技术面试官和面试教练，深谙背诵记忆规律。请为面试考点拓扑中的当前节点生成一篇可直接背诵的面试速记文章。
+
+{{ancestors}}{{siblings}}当前节点信息：
+- 考点：{{topic}}
+- 描述：{{description}}
+
+要求：
+1. 只返回纯 JSON 对象，不要有任何前言或结语
+2. **JSON 格式必须正确**：
+   - title 和 content 是字符串类型，必须用双引号包裹
+   - **content 中的所有双引号必须转义为 \"**
+   - **content 中的换行符必须转义为 \n**
+   - **content 中的反斜杠必须转义为 \\**
+3. 不要使用 markdown 代码块标记
+4. **全文控制在 500～1500 字**，面试速记要短、要能背，拒绝注水
+5. 每个知识点先给 30 秒版本，再给 5 分钟版本
+6. 如有兄弟节点，在对比辨析中体现与兄弟考点的区别（面试最爱问“区别”）
+
+JSON 格式：
+{
+  "title": "标题（考点 + 面试速记）",
+  "content": "Markdown 格式，必须包含以下章节：\n## 一句话答案\n（面试时脱口而出的 30 秒版本，必须先背下来）\n## 高频面试问答\n（3-6 组：**Q：面试官原话式提问**，A：30 秒标准回答，可直接背诵）\n## 关键数字与参数\n（必背的数字/配置/公式，逐条列出，如容量、默认值、阈值）\n## 对比辨析\n（与兄弟主题/易混概念的对比表格，表格比段落好背）\n## 追问链\n（面试官顺着答案往深处追问的问题及答法。**格式强制**：每个条目固定两行——第一行【追问】+问题，第二行以 → 开头给答法，条目之间空一行，严禁问答挤在同一行）\n示例：\n【追问】为什么用跳表不用红黑树？\n→ antirez 原话三点：实现简单；范围查询友好；改造灵活。\n\n【追问】跳表查询复杂度是多少？\n→ O(logN)，层数按概率随机生成。"'
+}开始生成，只返回 JSON：`,
 		},
 	}
 
@@ -443,8 +497,21 @@ JSON 格式（importance 取 high/medium/low，difficulty 取 1-5 的整数）�
 		}
 	}
 
+	// 停用已废弃的模板（代码不再引用，保留历史记录但从管理列表语义上移除）
+	for _, name := range deprecatedPrompts {
+		if p, err := s.promptRepo.FindByName(name); err == nil && p != nil && p.IsActive {
+			p.IsActive = false
+			if err := s.promptRepo.Update(p); err != nil {
+				return fmt.Errorf("failed to deactivate prompt %s: %w", name, err)
+			}
+		}
+	}
+
 	return nil
 }
+
+// deprecatedPrompts 历史上被代码引用、现已被替代的模板名
+var deprecatedPrompts = []string{"child_node_info"}
 
 // ValidateRequiredPrompts 验证所有必需的提示词模板是否存在于数据库中
 func (s *PromptService) ValidateRequiredPrompts() error {
@@ -454,9 +521,11 @@ func (s *PromptService) ValidateRequiredPrompts() error {
 		"explain_node",
 		"generate_quiz",
 		"generate_article",
+		"generate_article_interview",
 		"generate_single_question",
-		"child_node_info",
+		"generate_single_question_interview",
 		"child_nodes_batch",
+		"child_nodes_batch_interview",
 	}
 
 	var missing []string

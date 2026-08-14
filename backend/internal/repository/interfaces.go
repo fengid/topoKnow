@@ -12,7 +12,7 @@ type TreeRepositoryInterface interface {
 	FindByID(id string) (*model.Tree, error)
 	FindAll() ([]model.Tree, error)
 	FindByIDWithRootNode(id string) (*model.Tree, error)
-	FindByRootTopicWithRootNode(rootTopic string) (*model.Tree, error)
+	FindByTopicAndModeWithRootNode(rootTopic, mode string) (*model.Tree, error)
 	Delete(id string) error
 }
 

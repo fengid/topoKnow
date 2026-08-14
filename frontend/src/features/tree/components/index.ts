@@ -1,3 +1,4 @@
 export { CustomNode } from './CustomNode'
 export { DisplayModeToggle, type DisplayMode } from './DisplayModeToggle'
-export { ImportanceLegend } from './ImportanceLegend'
+export { TreeModeToggle, TREE_MODES } from './TreeModeToggle'
+export { ZoomIndicator } from './ZoomIndicator'

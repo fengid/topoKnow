@@ -12,6 +12,7 @@ type SingleQuestionResponse struct {
 type CreateTreeRequest struct {
 	RootTopic string `json:"root_topic" binding:"required"`
 	PromptID  string `json:"prompt_id"` // 可选，提示词 ID
+	Mode      string `json:"mode"`      // understanding（默认）/ interview
 }
 
 type CreateNodeRequest struct {
@@ -88,6 +89,7 @@ type ExpandContext struct {
 	ParentDesc       string
 	ParentImportance string
 	ChildDepth       int
+	Mode             string // 树的模式，决定提示词与分层策略
 	Ancestors        []AncestorInfo
 	ExistingSiblings []SiblingInfo
 }

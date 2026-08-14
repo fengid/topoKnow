@@ -45,10 +45,8 @@ interface CustomNodeData {
 // Custom Node Component - iOS 26 Liquid Glass Style
 export function CustomNode({
   data,
-  selected,
 }: {
   data: CustomNodeData
-  selected: boolean
 }) {
   const { contextMenuNodeId, setContextMenuNodeId } = useUIStore()
   const [showTooltip, setShowTooltip] = useState(false)
@@ -177,7 +175,7 @@ export function CustomNode({
         whileTap={{ scale: 0.98 }}
         className={`
           liquid-node
-          ${selected || data.isFocus ? 'liquid-node-selected' : ''}
+          ${data.isFocus ? 'liquid-node-selected' : ''}
           ${importanceClass[data.importance as keyof typeof importanceClass] || ''}
           ${data.isLoading ? 'liquid-node-loading' : ''}
         `}
@@ -298,7 +296,7 @@ export function CustomNode({
               className="liquid-node-context-menu-item"
             >
               <Sparkles className="w-4 h-4" style={{ color: 'rgba(201,169,110,0.7)' }} />
-              AI 展开
+              {data.hasChildren ? '追加子节点' : 'AI 生成子节点'}
             </button>
             <button
               onClick={() => {
