@@ -56,7 +56,7 @@ export function useTreeCanvas(treeId?: string) {
   // ---------- 状态 ----------
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [focusNodeId, setFocusNodeId] = useState<string | null>(null)
-  const [displayMode, setDisplayMode] = useState<'tree' | 'rows'>('tree')
+  const [displayMode, setDisplayMode] = useState<'tree' | 'rows'>('rows')
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>(closedDialog)
   const [batchGenTarget, setBatchGenTarget] = useState<{ nodeId: string; topic: string } | null>(null)
 
@@ -387,22 +387,50 @@ export function useTreeCanvas(treeId?: string) {
     setSelectedNodeId(null)
   }, [])
 
-  // 鼠标侧键（window 级监听，弹窗打开时也生效）：前进进入焦点详情，后退退出详情
+  // 鼠标侧键（window 级监听，弹窗打开时也生效）：前进进入焦点详情
+  // （后退键不在此处理：浏览器会在历史栈层面回退，由下方 popstate 守卫接管，保证一次只退出一层上下文）
   const focusRef = useRef<string | null>(null)
   const rootIdRef = useRef<string | null>(null)
   focusRef.current = focusNodeId
   rootIdRef.current = treeData?.root_node?.id ?? null
   useEffect(() => {
     const onAuxClick = (event: MouseEvent) => {
-      if (event.button === 3) {
-        setSelectedNodeId(null)
-      } else if (event.button === 4) {
+      if (event.button === 4) {
         const focusId = focusRef.current ?? rootIdRef.current
         if (focusId) setSelectedNodeId(focusId)
       }
     }
     window.addEventListener('auxclick', onAuxClick)
     return () => window.removeEventListener('auxclick', onAuxClick)
+  }, [])
+
+  // 历史栈守卫：后退键逐层退出上下文（详情 → 焦点 → 离开页面），而非直接回退 URL
+  const selectedNodeIdRef = useRef<string | null>(null)
+  selectedNodeIdRef.current = selectedNodeId
+  useEffect(() => {
+    const guardState = { __treeGuard: true }
+    window.history.pushState(guardState, '')
+
+    const onPopState = (event: PopStateEvent) => {
+      // 前进键回到守卫层：忽略（前进行为由 auxclick 处理）
+      if ((event.state as { __treeGuard?: boolean } | null)?.__treeGuard) return
+
+      if (selectedNodeIdRef.current) {
+        // 第一层：退出详情
+        setSelectedNodeId(null)
+        window.history.pushState(guardState, '')
+      } else if (focusRef.current && rootIdRef.current && focusRef.current !== rootIdRef.current) {
+        // 第二层：收起焦点，回退到父节点
+        setFocusNodeId(parentMapRef.current.get(focusRef.current) ?? null)
+        window.history.pushState(guardState, '')
+      } else {
+        // 没有可退的上下文：执行真正的页面回退
+        window.history.back()
+      }
+    }
+
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
   }, [])
 
   // 卸载时清理定时器
