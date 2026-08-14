@@ -8,7 +8,6 @@ export interface Node {
   difficulty: number
   depth: number
   position_order: number
-  is_expanded?: boolean
   children?: Node[]
   created_at: string
   updated_at: string

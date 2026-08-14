@@ -3,14 +3,13 @@ import { createPortal } from 'react-dom'
 import { Handle, Position } from 'reactflow'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  ChevronDown,
-  ChevronRight,
   Trash2,
   Edit3,
   Sparkles,
   Info,
   FileText,
   Layers,
+  GitBranch,
 } from 'lucide-react'
 import { useUIStore } from '@/store'
 
@@ -28,12 +27,11 @@ interface CustomNodeData {
   difficulty?: number
   importance?: string
   onExpand?: () => void
-  onToggleExpand?: () => void
   onEdit?: () => void
   onDelete?: () => void
   onDeleteChildren?: () => void
   hasChildren?: boolean
-  isExpanded?: boolean
+  isFocus?: boolean
   isLoading?: boolean
   onShowDetail?: () => void
   onMouseEnter?: (e: React.MouseEvent) => void
@@ -179,7 +177,7 @@ export function CustomNode({
         whileTap={{ scale: 0.98 }}
         className={`
           liquid-node
-          ${selected ? 'liquid-node-selected' : ''}
+          ${selected || data.isFocus ? 'liquid-node-selected' : ''}
           ${importanceClass[data.importance as keyof typeof importanceClass] || ''}
           ${data.isLoading ? 'liquid-node-loading' : ''}
         `}
@@ -204,19 +202,9 @@ export function CustomNode({
             )}
           </div>
           {data.hasChildren && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                data.onToggleExpand?.()
-              }}
-              className="liquid-node-expand-btn"
-            >
-              {data.isExpanded ? (
-                <ChevronDown className="w-4 h-4" />
-              ) : (
-                <ChevronRight className="w-4 h-4" />
-              )}
-            </button>
+            <div className="liquid-node-expand-btn" title="包含子节点">
+              <GitBranch className="w-3.5 h-3.5" />
+            </div>
           )}
         </div>
 

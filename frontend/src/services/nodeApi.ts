@@ -8,9 +8,6 @@ export const nodeApi = {
 
   deleteChildren: (id: string) => client.delete(`/nodes/${id}/children`),
 
-  updateExpanded: (id: string, isExpanded: boolean) =>
-    client.patch<ApiResponse<Node>>(`/nodes/${id}/expanded`, { is_expanded: isExpanded }),
-
   expand: (id: string, request: ExpandNodeRequest, model?: string) =>
     client.post<ApiResponse<Node[]>>(`/nodes/${id}/expand`, { ...request, model }),
 

@@ -149,25 +149,19 @@
   opacity: 0.8;
 }
 
-/* 节点展开按钮 */
+/* 有子节点指示徽章 */
 .liquid-node-expand-btn {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 24px;
   height: 24px;
+  flex-shrink: 0;
   border-radius: 8px;
   background: var(--home-card-bg);
   border: 1px solid var(--home-border);
   color: var(--home-text-sub);
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.liquid-node-expand-btn:hover {
-  background: var(--home-toggle-hover);
-  color: var(--home-text);
-  border-color: var(--home-border);
+  opacity: 0.8;
 }
 
 /* 节点加载状态 */
