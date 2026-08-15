@@ -177,8 +177,7 @@ export default function TreePage() {
           onNodeDragStart={onNodeDragStart}
           onNodeDragStop={onNodeDragStop}
           onPaneClick={onPaneClick}
-          fitView
-          fitViewOptions={{ maxZoom: 1 }}
+          defaultViewport={{ x: 0, y: 0, zoom: 1 }}
           attributionPosition="bottom-left"
           defaultEdgeOptions={{
             type: 'smoothstep',
