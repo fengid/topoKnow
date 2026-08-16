@@ -52,3 +52,13 @@ services:
       - "6010:80"
     depends_on:
       - backend
+
+  mobile:
+    build:
+      context: ./mobile
+      dockerfile: Dockerfile
+    container_name: topoknow-mobile
+    ports:
+      - "6012:80"
+    depends_on:
+      - backend

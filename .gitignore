@@ -19,6 +19,7 @@ backend/server
 backend/*.exe
 backend/*.test
 frontend/dist/
+mobile/dist/
 frontend/node_modules/
 node_modules/
 
